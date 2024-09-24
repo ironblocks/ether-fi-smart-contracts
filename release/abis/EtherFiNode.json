@@ -10,6 +10,13 @@
   },
   {
     "type": "function",
+    "name": "DEPRECATED_claimDelayedWithdrawalRouterWithdrawals",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "DEPRECATED_exitRequestTimestamp",
     "inputs": [],
     "outputs": [
@@ -69,6 +76,19 @@
         "name": "",
         "type": "uint8",
         "internalType": "enum IEtherFiNode.VALIDATOR_PHASE"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "DEPRECATED_restakingObservedExitBlock",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -259,7 +279,7 @@
     "name": "callEigenPod",
     "inputs": [
       {
-        "name": "data",
+        "name": "_data",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -275,40 +295,136 @@
   },
   {
     "type": "function",
-    "name": "canClaimRestakedFullWithdrawal",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "claimQueuedWithdrawals",
+    "name": "completeQueuedWithdrawal",
     "inputs": [
       {
-        "name": "maxNumWithdrawals",
+        "name": "withdrawals",
+        "type": "tuple",
+        "internalType": "struct IDelegationManager.Withdrawal",
+        "components": [
+          {
+            "name": "staker",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "delegatedTo",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "withdrawer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "startBlock",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "strategies",
+            "type": "address[]",
+            "internalType": "contract IStrategy[]"
+          },
+          {
+            "name": "shares",
+            "type": "uint256[]",
+            "internalType": "uint256[]"
+          }
+        ]
+      },
+      {
+        "name": "middlewareTimesIndexes",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "_checkIfHasOutstandingEigenLayerWithdrawals",
+        "name": "_receiveAsTokens",
         "type": "bool",
         "internalType": "bool"
       }
     ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "completeQueuedWithdrawals",
+    "inputs": [
+      {
+        "name": "withdrawals",
+        "type": "tuple[]",
+        "internalType": "struct IDelegationManager.Withdrawal[]",
+        "components": [
+          {
+            "name": "staker",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "delegatedTo",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "withdrawer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "startBlock",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "strategies",
+            "type": "address[]",
+            "internalType": "contract IStrategy[]"
+          },
+          {
+            "name": "shares",
+            "type": "uint256[]",
+            "internalType": "uint256[]"
+          }
+        ]
+      },
+      {
+        "name": "middlewareTimesIndexes",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "_receiveAsTokens",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "completedWithdrawalFromRestakingInGwei",
+    "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "bool",
-        "internalType": "bool"
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ],
-    "stateMutability": "nonpayable"
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -348,12 +464,12 @@
     "name": "forwardCall",
     "inputs": [
       {
-        "name": "to",
+        "name": "_to",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "data",
+        "name": "_data",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -537,19 +653,6 @@
   },
   {
     "type": "function",
-    "name": "hasOutstaingEigenPodWithdrawalsQueuedBeforeExit",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "implementation",
     "inputs": [],
     "outputs": [
@@ -583,6 +686,30 @@
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isValidSignature",
+    "inputs": [
+      {
+        "name": "_digestHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "_signature",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "magicValue",
+        "type": "bytes4",
+        "internalType": "bytes4"
       }
     ],
     "stateMutability": "view"
@@ -681,16 +808,60 @@
   },
   {
     "type": "function",
-    "name": "processNodeExit",
+    "name": "pendingWithdrawalFromRestakingInGwei",
     "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "processFullWithdraw",
+    "inputs": [
+      {
+        "name": "_validatorId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "queueRestakedWithdrawal",
+    "name": "processNodeExit",
+    "inputs": [
+      {
+        "name": "_validatorId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "fullWithdrawalRoots",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "queueEigenpodFullWithdrawal",
     "inputs": [],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "fullWithdrawalRoots",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -713,16 +884,16 @@
   },
   {
     "type": "function",
-    "name": "restakingObservedExitBlock",
-    "inputs": [],
-    "outputs": [
+    "name": "setProofSubmitter",
+    "inputs": [
       {
-        "name": "",
-        "type": "uint32",
-        "internalType": "uint32"
+        "name": "_newProofSubmitter",
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "view"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -746,6 +917,19 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "startCheckpoint",
+    "inputs": [
+      {
+        "name": "_revertIfNoBalance",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",

@@ -33,7 +33,7 @@ deploy-goerli-suite :; @forge script script/deploys/DeployEtherFISuite.s.sol:Dep
 
 deploy-goerli-early-reward-pool :; @forge script script/deploys/DeployEarlyAdopterPool.s.sol:DeployEarlyAdopterPoolScript --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --slow
 
-deploy-phase-1:;  forge script script/deploys/DeployPhaseOne.s.sol:DeployPhaseOne --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
+deploy-phase-1:;  forge script script/deploys/DeployPhaseOne.s.sol:DeployPhaseOne --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --sender ${DEPLOYER} --slow && bash script/extractABI.sh
 
 deploy-test-deposit-contract:;  forge script script/deploys/testing/DeployTestDepositContract.s.sol:DeployTestDepositContractScript --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
 
@@ -49,11 +49,11 @@ deploy-mainnet-lpaPoints:;  forge script script/deploys/DeployLoyaltyPointsMarke
 
 deploy-optimism-tvlOracle:;  forge script script/deploys/DeployTVLOracle.s.sol:DeployTVLOracleScript --rpc-url ${OPTIMISM_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
 
-deploy-goerli-address-provider:;  forge script script/deploys/DeployAndPopulateAddressProviderScript.s.sol:DeployAndPopulateAddressProvider --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
+deploy-goerli-address-provider:;  forge script script/deploys/DeployAndPopulateAddressProviderScript.s.sol:DeployAndPopulateAddressProvider --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv && bash script/extractABI.sh
 
 deploy-mainnet-address-provider:;  forge script script/deploys/DeployAndPopulateAddressProviderScript.s.sol:DeployAndPopulateAddressProvider --rpc-url ${MAINNET_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
 
-deploy-goerli-phase-2:;  forge script script/deploys/DeployPhaseTwo.s.sol:DeployPhaseTwoScript --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv && bash script/extractABI.sh
+deploy-goerli-phase-2:;  forge script script/deploys/DeployPhaseTwo.s.sol:DeployPhaseTwoScript --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
 
 deploy-mainnet-phase-2:;  forge script script/deploys/DeployPhaseTwo.s.sol:DeployPhaseTwoScript --rpc-url ${MAINNET_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
 

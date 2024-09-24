@@ -115,7 +115,20 @@ contract DeployPhaseTwoScript is Script {
 
             etherFiOracleInstance.addCommitteeMember(address(0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39));
             etherFiOracleInstance.addCommitteeMember(address(0x601B37004f2A6B535a6cfBace0f88D2d534aCcD8));
-        } else {
+        }
+        else if (block.chainid == 17000) {
+            etherFiOracleInstance.initialize(1, 96, 0, 32, 12, 1695902400);
+
+            etherFiOracleInstance.addCommitteeMember(address(0x0a13E1F358aF312fEA930a2f952E13D0456Ac7E5));
+            etherFiOracleInstance.addCommitteeMember(address(0x31198Aac4dBa332F17128165AE14aD72801f1293));
+        }
+        else if (block.chainid == 31337) {
+            etherFiOracleInstance.initialize(1, 96, 0, 32, 12, 1695902400);
+
+            etherFiOracleInstance.addCommitteeMember(0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC);
+            etherFiOracleInstance.addCommitteeMember(0x90F79bf6EB2c4f870365E785982E1f101E93b906);
+        }
+        else {
             require(false, "chain is wrong");
         }
 
@@ -138,7 +151,7 @@ contract DeployPhaseTwoScript is Script {
         if (block.chainid == 1) {
             acceptableRebaseAprInBps = 500; // 5%
             postReportWaitTimeInSlots = 7200 / 2; // 7200 slots = 225 epochs = 1 day
-        } else if (block.chainid == 5) {
+        } else if (block.chainid == 17000) {
             acceptableRebaseAprInBps = 600; // 6%
             postReportWaitTimeInSlots = 15 minutes / 12 seconds; // 15 minutes
         } else {
