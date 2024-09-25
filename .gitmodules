@@ -22,3 +22,6 @@
 [submodule "lib/eigenlayer-contracts"]
 	path = lib/eigenlayer-contracts
 	url = https://github.com/Layr-Labs/eigenlayer-contracts
+[submodule "lib/ironblocks/onchain-firewall"]
+	path = lib/ironblocks/onchain-firewall
+	url = https://github.com/ironblocks/onchain-firewall
