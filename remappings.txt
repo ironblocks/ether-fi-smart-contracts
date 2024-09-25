@@ -9,3 +9,9 @@ forge-std/=lib/forge-std/src/
 @layerzerolabs/lz-evm-oapp-v2/contracts-upgradeable/=lib/Etherfi-SyncPools/node_modules/layerzero-v2/oapp/contracts/
 
 @ironblocks/firewall-consumer/=lib/ironblocks/onchain-firewall/packages/firewall-consumer/
+@openzeppelin/=lib/openzeppelin-contracts/
+ds-test/=lib/openzeppelin-contracts/lib/forge-std/lib/ds-test/src/
+erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/
+forge-std/=lib/forge-std/src/
+openzeppelin-contracts/=lib/openzeppelin-contracts/
+openzeppelin/=lib/openzeppelin-contracts/contracts/
