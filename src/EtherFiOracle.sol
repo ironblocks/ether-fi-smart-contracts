@@ -2,16 +2,18 @@
 pragma solidity ^0.8.13;
 
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IEtherFiAdmin.sol";
 
 
-contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle {
+contract EtherFiOracle is VennFirewallConsumer, Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle {
 
     mapping(address => IEtherFiOracle.CommitteeMemberState) public committeeMemberStates; // committee member wallet address to its State
     mapping(bytes32 => IEtherFiOracle.ConsensusState) public consensusStates; // report's hash -> Consensus State
@@ -56,6 +58,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     function initialize(uint32 _quorumSize, uint32 _reportPeriodSlot, uint32 _reportStartSlot, uint32 _slotsPerEpoch, uint32 _secondsPerSlot, uint32 _genesisTime)
         external
         initializer
+        firewallProtected
     {
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -67,9 +70,12 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         SLOTS_PER_EPOCH = _slotsPerEpoch;
         SECONDS_PER_SLOT = _secondsPerSlot;
         BEACON_GENESIS_TIME = _genesisTime;
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
-    function submitReport(OracleReport calldata _report) external whenNotPaused returns (bool) {
+    function submitReport(OracleReport calldata _report) external whenNotPaused firewallProtected returns (bool) {
         bytes32 reportHash = generateReportHash(_report);
         require(!consensusStates[reportHash].consensusReached, "Consensus already reached");
         require(shouldSubmitReport(msg.sender), "You don't need to submit a report");
@@ -296,31 +302,31 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit ConsensusVersionUpdated(_consensusVersion);
     }
 
-    function setEtherFiAdmin(address _etherFiAdminAddress) external onlyOwner {
+    function setEtherFiAdmin(address _etherFiAdminAddress) external onlyOwner firewallProtected {
         require(etherFiAdmin == IEtherFiAdmin(address(0)), "EtherFiAdmin is already set");
         etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
     }
     
-    function unpublishReport(bytes32 _hash) external isAdmin {
+    function unpublishReport(bytes32 _hash) external isAdmin firewallProtected {
         require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
     }
 
-    function updateLastPublishedBlockStamps(uint32 _lastPublishedReportRefSlot, uint32 _lastPublishedReportRefBlock) external isAdmin {
+    function updateLastPublishedBlockStamps(uint32 _lastPublishedReportRefSlot, uint32 _lastPublishedReportRefBlock) external isAdmin firewallProtected {
         lastPublishedReportRefSlot = _lastPublishedReportRefSlot;
         lastPublishedReportRefBlock = _lastPublishedReportRefBlock;
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         admins[_address] = _isAdmin;
     }
 
-    function pauseContract() external isAdmin {
+    function pauseContract() external isAdmin firewallProtected {
         _pause();
     }
 
-    function unPauseContract() external isAdmin {
+    function unPauseContract() external isAdmin firewallProtected {
         _unpause();
     }
 
@@ -333,5 +339,13 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     modifier isAdmin() {
         require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admin");
         _;
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 }

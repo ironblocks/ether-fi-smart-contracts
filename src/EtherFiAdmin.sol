@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IStakingManager.sol";
@@ -19,7 +21,7 @@ interface IEtherFiPausable {
     function paused() external view returns (bool);
 }
 
-contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract EtherFiAdmin is VennFirewallConsumer, Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     IEtherFiOracle public etherFiOracle;
     IStakingManager public stakingManager;
@@ -60,7 +62,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         address _withdrawRequestNft,
         int32 _acceptableRebaseAprInBps,
         uint16 _postReportWaitTimeInSlots
-    ) external initializer {
+    ) external initializer firewallProtected {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
@@ -73,13 +75,16 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     // pause {etherfi oracle, staking manager, auction manager, etherfi nodes manager, liquidity pool, membership manager}
     // based on the boolean flags
     // if true, pause,
     // else, unpuase
-    function pause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external isPauser() {
+    function pause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external isPauser() firewallProtected {
         if (_etherFiOracle && !IEtherFiPausable(address(etherFiOracle)).paused()) {
             etherFiOracle.pauseContract();
         }
@@ -105,7 +110,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function unPause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external onlyOwner {
+    function unPause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external onlyOwner firewallProtected {
         if (_etherFiOracle && IEtherFiPausable(address(etherFiOracle)).paused()) {
             etherFiOracle.unPauseContract();
         }
@@ -142,7 +147,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return true;
     }
 
-    function executeTasks(IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
+    function executeTasks(IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() firewallProtected {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
         require(etherFiOracle.isConsensusReached(reportHash), "EtherFiAdmin: report didn't reach consensus");
@@ -236,21 +241,21 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return (lastHandledReportRefBlock == 0) ? 0 : lastHandledReportRefBlock + 1;
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         admins[_address] = _isAdmin;
 
         emit AdminUpdated(_address, _isAdmin);
     }
 
-    function updatePauser(address _address, bool _isPauser) external onlyOwner {
+    function updatePauser(address _address, bool _isPauser) external onlyOwner firewallProtected {
         pausers[_address] = _isPauser;
     }
 
-    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyOwner {
+    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyOwner firewallProtected {
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
-    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external isAdmin {
+    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external isAdmin firewallProtected {
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
@@ -260,6 +265,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
 
     modifier isAdmin() {
         require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admio");

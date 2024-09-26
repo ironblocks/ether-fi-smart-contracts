@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract RegulationsManagerV2 is Ownable {
+contract RegulationsManagerV2 is VennFirewallConsumer, Ownable {
 
     bytes32 constant TYPEHASH = keccak256("TermsOfService(string message,bytes32 hashOfTerms)");
     bytes32 constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,string version)");
@@ -18,7 +19,7 @@ contract RegulationsManagerV2 is Ownable {
 
     error InvalidTermsAndConditionsSignature();
 
-    function verifyTermsSignature(bytes memory signature) external {
+    function verifyTermsSignature(bytes memory signature) external firewallProtected {
         if (recoverSigner(generateTermsDigest(), signature) != msg.sender) revert InvalidTermsAndConditionsSignature();
     }
 
@@ -38,7 +39,7 @@ contract RegulationsManagerV2 is Ownable {
     //----------------------------------  Admin   ------------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function updateTermsOfService(string memory _message, bytes32 _hashOfTerms, string memory _domainVersion) external onlyOwner {
+    function updateTermsOfService(string memory _message, bytes32 _hashOfTerms, string memory _domainVersion) external onlyOwner firewallProtected {
         currentTerms = TermsOfService({ message: _message, hashOfTerms: _hashOfTerms });
         DOMAIN_VERSION = _domainVersion;
     }

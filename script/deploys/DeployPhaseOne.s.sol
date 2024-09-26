@@ -198,8 +198,7 @@ contract DeployPhaseOne is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.envAddress("DEPLOYER");
         vm.startBroadcast(deployerPrivateKey);
-        uint64 nonce = 3;
-        vm.setNonce(deployer, nonce);
+
     }
 
     function _stringToUint(

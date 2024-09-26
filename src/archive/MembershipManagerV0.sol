@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
-
+import "@openzeppelin/contracts/utils/Context.sol";
 import "../interfaces/IeETH.sol";
 import "../interfaces/IMembershipManagerV0.sol";
 import "../interfaces/IMembershipNFT.sol";
@@ -14,7 +15,7 @@ import "../interfaces/ILiquidityPool.sol";
 import "../libraries/GlobalIndexLibrary.sol";
 
 
-contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManagerV0 {
+contract MembershipManagerV0 is VennFirewallConsumer, Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManagerV0 {
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -78,7 +79,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     error Deprecated();
     error DisallowZeroAddress();
 
-    function initialize(address _eEthAddress, address _liquidityPoolAddress, address _membershipNft, address _treasury, address _protocolRevenueManager) external initializer {
+    function initialize(address _eEthAddress, address _liquidityPoolAddress, address _membershipNft, address _treasury, address _protocolRevenueManager) external initializer firewallProtected {
         if (_eEthAddress == address(0) || _liquidityPoolAddress == address(0) || _treasury == address(0) || _protocolRevenueManager == address(0) || _membershipNft == address(0)) revert DisallowZeroAddress();
 
         __Ownable_init();
@@ -98,7 +99,10 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
         treasuryFeeSplitPercent = 0;
         protocolRevenueFeeSplitPercent = 100;
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     error InvalidEAPRollover();
 
@@ -117,7 +121,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         uint256 _snapshotEthAmount,
         uint256 _points,
         bytes32[] calldata _merkleProof
-    ) external payable whenNotPaused returns (uint256) {
+    ) external payable whenNotPaused firewallProtected returns (uint256) {
         if (_points == 0 || msg.value < _snapshotEthAmount || msg.value > _snapshotEthAmount * 2 || msg.value != _amount + _amountForPoints) revert InvalidEAPRollover();
 
         membershipNFT.processDepositFromEapUser(msg.sender, _eapDepositBlockNumber, _snapshotEthAmount, _points, _merkleProof);
@@ -193,7 +197,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     /// @dev This function allows users to request exchange of membership tokens to ETH.
     /// @param _tokenId The ID of the membership NFT.
     /// @param _amount The amount of membership tokens to exchange.
-    function requestWithdraw(uint256 _tokenId, uint256 _amount) external whenNotPaused returns (uint256) {
+    function requestWithdraw(uint256 _tokenId, uint256 _amount) external whenNotPaused firewallProtected returns (uint256) {
         _requireTokenOwner(_tokenId);
         if (liquidityPool.totalValueInLp() < _amount) revert InsufficientLiquidity();
 
@@ -220,7 +224,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
     /// @notice request to withdraw the entire balance of this NFT and burn it
     /// @param _tokenId The ID of the membership NFT to liquidate
-    function requestWithdrawAndBurn(uint256 _tokenId) external whenNotPaused returns (uint256) {
+    function requestWithdrawAndBurn(uint256 _tokenId) external whenNotPaused firewallProtected returns (uint256) {
         _requireTokenOwner(_tokenId);
 
         // Claim all staking rewards before burn
@@ -252,7 +256,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         _emitNftUpdateEvent(_tokenId);
     }
 
-    function rebase(int128 _accruedRewards) external {
+    function rebase(int128 _accruedRewards) external firewallProtected {
         _requireAdmin();
         uint256 ethRewardsPerEEthShareBeforeRebase = liquidityPool.amountForShare(1 ether);
         liquidityPool.rebase(_accruedRewards);
@@ -288,7 +292,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     error TierLimitExceeded();
-    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external returns (uint256) {
+    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external firewallProtected returns (uint256) {
         _requireAdmin();
         if (tierDeposits.length >= type(uint8).max) revert TierLimitExceeded();
         tierDeposits.push(TierDeposit(0, 0));
@@ -297,7 +301,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     error OutOfBound();
-    function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external {
+    function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external firewallProtected {
         _requireAdmin();
         if (_tier >= tierData.length) revert OutOfBound();
         tierData[_tier].requiredTierPoints = _requiredTierPoints;
@@ -309,7 +313,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     /// @param _tokenIds The IDs of the membership NFT.
     /// @param _loyaltyPoints The number of loyalty points to set for the specified NFT.
     /// @param _tierPoints The number of tier points to set for the specified NFT.
-    function setPointsBatch(uint256[] calldata _tokenIds, uint40[] calldata _loyaltyPoints, uint40[] calldata _tierPoints) external {
+    function setPointsBatch(uint256[] calldata _tokenIds, uint40[] calldata _loyaltyPoints, uint40[] calldata _tierPoints) external firewallProtected {
         for (uint256 i = 0; i < _tokenIds.length; i++) {
             setPoints(_tokenIds[i], _loyaltyPoints[i], _tierPoints[i]);            
         }
@@ -331,7 +335,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     /// @notice Recover the tier points for a given NFT.
     /// @param _tokenIds The IDs of the membership NFT.
     /// @param _eapDepositBlockNumbers The block numbers at which the users deposited into the EAP
-    function recoverTierPointsForEapBatch(uint256[] calldata _tokenIds, uint32[] calldata _eapDepositBlockNumbers) external {
+    function recoverTierPointsForEapBatch(uint256[] calldata _tokenIds, uint32[] calldata _eapDepositBlockNumbers) external firewallProtected {
         for (uint256 i = 0; i < _tokenIds.length; i++) {
             recoverTierPointsForEap(_tokenIds[i], _eapDepositBlockNumbers[i]);
         }
@@ -354,7 +358,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     error InvalidWithdraw();
-    function withdrawFees(uint256 _amount, address _recipient) external {
+    function withdrawFees(uint256 _amount, address _recipient) external firewallProtected {
         _requireAdmin();
         if (_recipient == address(0)) revert InvalidWithdraw();
         if (address(this).balance < _amount) revert InvalidWithdraw();
@@ -362,40 +366,40 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         if (!sent) revert InvalidWithdraw();
     }
 
-    function updatePointsParams(uint16 _newPointsBoostFactor, uint16 _newPointsGrowthRate) external {
+    function updatePointsParams(uint16 _newPointsBoostFactor, uint16 _newPointsGrowthRate) external firewallProtected {
         _requireAdmin();
         pointsBoostFactor = _newPointsBoostFactor;
         pointsGrowthRate = _newPointsGrowthRate;
     }
 
     /// @dev set how many blocks a token is locked from trading for after withdrawing
-    function setWithdrawalLockBlocks(uint32 _blocks) external {
+    function setWithdrawalLockBlocks(uint32 _blocks) external firewallProtected {
         _requireAdmin();
         withdrawalLockBlocks = _blocks;
     }
 
     /// @notice Updates minimum valid deposit
     /// @param _value minimum deposit in wei
-    function setMinDepositWei(uint56 _value) external {
+    function setMinDepositWei(uint56 _value) external firewallProtected {
         _requireAdmin();
         minDepositGwei = _value;
     }
 
     /// @notice Updates minimum valid deposit
     /// @param _percent integer percentage value
-    function setMaxDepositTopUpPercent(uint8 _percent) external {
+    function setMaxDepositTopUpPercent(uint8 _percent) external firewallProtected {
         _requireAdmin();
         maxDepositTopUpPercent = _percent;
     }
 
     /// @notice Updates the time a user must wait between top ups
     /// @param _newWaitTime the new time to wait between top ups
-    function setTopUpCooltimePeriod(uint32 _newWaitTime) external {
+    function setTopUpCooltimePeriod(uint32 _newWaitTime) external firewallProtected {
         _requireAdmin();
         topUpCooltimePeriod = _newWaitTime;
     }
 
-    function setFeeAmounts(uint256 _mintFeeAmount, uint256 _burnFeeAmount, uint256 _upgradeFeeAmount) external {
+    function setFeeAmounts(uint256 _mintFeeAmount, uint256 _burnFeeAmount, uint256 _upgradeFeeAmount) external firewallProtected {
         _requireAdmin();
         _feeAmountSanityCheck(_mintFeeAmount);
         _feeAmountSanityCheck(_burnFeeAmount);
@@ -407,18 +411,18 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         admins[_address] = _isAdmin;
     }
 
     //Pauses the contract
-    function pauseContract() external {
+    function pauseContract() external firewallProtected {
         _requireAdmin();
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external {
+    function unPauseContract() external firewallProtected {
         _requireAdmin();
         _unpause();
     }
@@ -709,6 +713,14 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 
     //--------------------------------------------------------------------------------------

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
-
+import "@openzeppelin/contracts/utils/Context.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
@@ -14,9 +15,9 @@ import "./interfaces/IEtherFiAdmin.sol";
 
 import "./libraries/GlobalIndexLibrary.sol";
 
-import "forge-std/console.sol";
 
 contract MembershipManager is
+    VennFirewallConsumer,
     Initializable,
     OwnableUpgradeable,
     PausableUpgradeable,
@@ -120,7 +121,7 @@ contract MembershipManager is
         address _etherFiAdminAddress,
         uint256 _fanBoostThresholdAmount,
         uint16 _burnFeeWaiverPeriodInDays
-    ) external onlyOwner {
+    ) external onlyOwner firewallProtected {
         etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
         fanBoostThreshold = uint16(_fanBoostThresholdAmount / 0.001 ether);
         burnFeeWaiverPeriodInDays = _burnFeeWaiverPeriodInDays;
@@ -136,7 +137,7 @@ contract MembershipManager is
         address _membershipNFT,
         address _treasury,
         address _protocolRevenueManager
-    ) external initializer {
+    ) external initializer firewallProtected {
         __Ownable_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
@@ -153,7 +154,10 @@ contract MembershipManager is
 
         // Set the caller as an admin
         admins[msg.sender] = true;
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     error InvalidEAPRollover();
 
@@ -172,7 +176,7 @@ contract MembershipManager is
         uint256 _snapshotEthAmount,
         uint256 _points,
         bytes32[] calldata _merkleProof
-    ) external payable whenNotPaused returns (uint256) {
+    ) external payable whenNotPaused firewallProtected returns (uint256) {
         if (
             _points == 0 ||
             msg.value < _snapshotEthAmount ||
@@ -244,11 +248,11 @@ contract MembershipManager is
     function wrapEth(
         uint256 _amount,
         uint256 _amountForPoints
-    ) external payable whenNotPaused returns (uint256) {
+    ) external payable whenNotPaused firewallProtected returns (uint256) {
         return wrapEth(_amount, _amountForPoints, address(0));
     }
 
-    function unwrapForEEthAndBurn(uint256 _tokenId) external whenNotPaused {
+    function unwrapForEEthAndBurn(uint256 _tokenId) external whenNotPaused firewallProtected {
         _requireTokenOwner(_tokenId);
 
         // Claim all staking rewards before burn
@@ -309,7 +313,7 @@ contract MembershipManager is
     function requestWithdraw(
         uint256 _tokenId,
         uint256 _amount
-    ) external whenNotPaused returns (uint256) {
+    ) external whenNotPaused firewallProtected returns (uint256) {
         _requireTokenOwner(_tokenId);
 
         // prevent transfers for several blocks after a withdrawal to prevent frontrunning
@@ -345,7 +349,7 @@ contract MembershipManager is
     /// @return uint256 ID of the withdraw request NFT
     function requestWithdrawAndBurn(
         uint256 _tokenId
-    ) external whenNotPaused returns (uint256) {
+    ) external whenNotPaused firewallProtected returns (uint256) {
         _requireTokenOwner(_tokenId);
 
         // Claim all staking rewards before burn
@@ -381,7 +385,7 @@ contract MembershipManager is
     }
 
     error InvalidCaller();
-    function rebase(int128 _accruedRewards) external {
+    function rebase(int128 _accruedRewards) external firewallProtected {
         if (msg.sender != address(etherFiAdmin)) revert InvalidCaller();
         uint256 ethRewardsPerEEthShareBeforeRebase = liquidityPool
             .amountForShare(1 ether);
@@ -456,7 +460,7 @@ contract MembershipManager is
     }
 
     error TierLimitExceeded();
-    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external {
+    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external firewallProtected {
         _requireAdmin();
         if (tierData.length >= type(uint8).max) revert TierLimitExceeded();
         tierData.push(TierData(0, _requiredTierPoints, _weight, 0));
@@ -468,7 +472,7 @@ contract MembershipManager is
         uint8 _tier,
         uint40 _requiredTierPoints,
         uint24 _weight
-    ) external {
+    ) external firewallProtected {
         _requireAdmin();
         if (_tier >= tierData.length) revert OutOfBound();
         tierData[_tier].requiredTierPoints = _requiredTierPoints;
@@ -495,14 +499,14 @@ contract MembershipManager is
     function updatePointsParams(
         uint16 _newPointsBoostFactor,
         uint16 _newPointsGrowthRate
-    ) external {
+    ) external firewallProtected {
         _requireAdmin();
         pointsBoostFactor = _newPointsBoostFactor;
         pointsGrowthRate = _newPointsGrowthRate;
     }
 
     /// @dev set how many blocks a token is locked from trading for after withdrawing
-    function setWithdrawalLockBlocks(uint32 _blocks) external {
+    function setWithdrawalLockBlocks(uint32 _blocks) external firewallProtected {
         _requireAdmin();
         withdrawalLockBlocks = _blocks;
     }
@@ -513,7 +517,7 @@ contract MembershipManager is
     function setDepositAmountParams(
         uint56 _minDepositGwei,
         uint8 _maxDepositTopUpPercent
-    ) external {
+    ) external firewallProtected {
         _requireAdmin();
         minDepositGwei = _minDepositGwei;
         maxDepositTopUpPercent = _maxDepositTopUpPercent;
@@ -521,7 +525,7 @@ contract MembershipManager is
 
     /// @notice Updates the time a user must wait between top ups
     /// @param _newWaitTime the new time to wait between top ups
-    function setTopUpCooltimePeriod(uint32 _newWaitTime) external {
+    function setTopUpCooltimePeriod(uint32 _newWaitTime) external firewallProtected {
         _requireAdmin();
         topUpCooltimePeriod = _newWaitTime;
     }
@@ -531,7 +535,7 @@ contract MembershipManager is
         uint256 _burnFeeAmount,
         uint256 _upgradeFeeAmount,
         uint16 _burnFeeWaiverPeriodInDays
-    ) external {
+    ) external firewallProtected {
         _requireAdmin();
         _feeAmountSanityCheck(_mintFeeAmount);
         _feeAmountSanityCheck(_burnFeeAmount);
@@ -544,25 +548,25 @@ contract MembershipManager is
 
     function setFanBoostThresholdEthAmount(
         uint256 _fanBoostThresholdEthAmount
-    ) external {
+    ) external firewallProtected {
         _requireAdmin();
         fanBoostThreshold = uint16(_fanBoostThresholdEthAmount / 0.001 ether);
     }
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         admins[_address] = _isAdmin;
     }
 
     //Pauses the contract
-    function pauseContract() external {
+    function pauseContract() external firewallProtected {
         _requireAdmin();
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external {
+    function unPauseContract() external firewallProtected {
         _requireAdmin();
         _unpause();
     }
@@ -1081,6 +1085,14 @@ contract MembershipManager is
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 
     //--------------------------------------------------------------------------------------

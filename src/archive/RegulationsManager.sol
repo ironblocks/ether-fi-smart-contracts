@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 import "../interfaces/IRegulationsManager.sol";
 
 contract RegulationsManager is
+    VennFirewallConsumer,
     IRegulationsManager,
     Initializable,
     OwnableUpgradeable,
@@ -41,14 +44,17 @@ contract RegulationsManager is
     }
     
     /// @notice initializes contract
-    function initialize() external initializer {
+    function initialize() external initializer firewallProtected {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     /// @notice sets a user apart of the whitelist, confirming they are not in a blacklisted country
-    function confirmEligibility(bytes32 _hash) external whenNotPaused {
+    function confirmEligibility(bytes32 _hash) external whenNotPaused firewallProtected {
         require(correctVersionHash[whitelistVersion] == _hash, "Incorrect hash");
         isEligible[whitelistVersion][msg.sender] = true;
         declarationHashes[msg.sender] = keccak256(abi.encodePacked(_hash, msg.sender));
@@ -59,7 +65,7 @@ contract RegulationsManager is
     /// @notice removes a user from the whitelist
     /// @dev can be called by the owner or the user them self
     /// @param _user the user to remove from the whitelist
-    function removeFromWhitelist(address _user) external whenNotPaused {
+    function removeFromWhitelist(address _user) external whenNotPaused firewallProtected {
         require(
             msg.sender == _user || msg.sender == owner(),
             "Incorrect Caller"
@@ -76,7 +82,7 @@ contract RegulationsManager is
 
     /// @notice resets the whitelist by incrementing the iteration
     /// @dev happens when there is an update to the blacklisted country list
-    function initializeNewWhitelist(bytes32 _newVersionHash) external onlyAdmin {
+    function initializeNewWhitelist(bytes32 _newVersionHash) external onlyAdmin firewallProtected {
         whitelistVersion++;
         correctVersionHash[whitelistVersion] = _newVersionHash;
 
@@ -84,18 +90,18 @@ contract RegulationsManager is
     }
 
     //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyAdmin firewallProtected {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyAdmin firewallProtected {
         _unpause();
     }
 
     /// @notice Updates the address of the admin
     /// @param _newAdmin the new address to set as admin
-    function updateAdmin(address _newAdmin, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _newAdmin, bool _isAdmin) external onlyOwner firewallProtected {
         require(_newAdmin != address(0), "Cannot be address zero");
         admins[_newAdmin] = _isAdmin;
     }
@@ -107,7 +113,14 @@ contract RegulationsManager is
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
+    
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
 
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------

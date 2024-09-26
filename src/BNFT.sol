@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
-contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract BNFT is VennFirewallConsumer, ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -23,19 +25,23 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //--------------------------------------------------------------------------------------
 
     /// @notice initialize to set variables on deployment
-    function initialize(address _stakingManagerAddress) initializer external {
+    function initialize(address _stakingManagerAddress) initializer external firewallProtected {
         require(_stakingManagerAddress != address(0), "No zero addresses");
         __ERC721_init("Bond NFT", "BNFT");
         __Ownable_init();
         __UUPSUpgradeable_init();
 
         stakingManagerAddress = _stakingManagerAddress;
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     /// @notice initialization function that should be called after phase 2.0 contract upgrade
-    function initializeOnUpgrade(address _etherFiNodesManagerAddress) onlyOwner external {
+    function initializeOnUpgrade(address _etherFiNodesManagerAddress) onlyOwner external firewallProtected {
         require(_etherFiNodesManagerAddress != address(0), "Cannot initialize to zero address");
 
+     
         etherFiNodesManagerAddress = _etherFiNodesManagerAddress;
     }
 
@@ -43,17 +49,17 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev Only through the staking contract and not by an EOA
     /// @param _receiver receiver of the NFT
     /// @param _validatorId the ID of the NFT
-    function mint(address _receiver, uint256 _validatorId) external onlyStakingManager {
+    function mint(address _receiver, uint256 _validatorId) external onlyStakingManager firewallProtected {
         _mint(_receiver, _validatorId);
     }
 
     /// @notice burn the associated bNFT when a full withdrawal is processed
-    function burnFromWithdrawal(uint256 _validatorId) external onlyEtherFiNodesManager {
+    function burnFromWithdrawal(uint256 _validatorId) external onlyEtherFiNodesManager firewallProtected {
         _burn(_validatorId);
     }
 
     /// @notice burn the associated one
-    function burnFromCancelBNftFlow(uint256 _validatorId) external onlyStakingManager {
+    function burnFromCancelBNftFlow(uint256 _validatorId) external onlyStakingManager firewallProtected {
         _burn(_validatorId);
     }
 
@@ -75,6 +81,14 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------

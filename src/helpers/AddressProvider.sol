@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
+
 interface EtherFiProxy {
     function getImplementation() external view returns (address);
 }
 
-contract AddressProvider {
+contract AddressProvider is VennFirewallConsumer {
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -36,7 +38,7 @@ contract AddressProvider {
     /// @dev Only called by the contract owner
     /// @param _contractAddress the proxy address of the contract we are adding
     /// @param _name the name of the contract for reference
-    function addContract(address _contractAddress, string memory _name) external onlyOwner {
+    function addContract(address _contractAddress, string memory _name) external onlyOwner firewallProtected {
         require(contracts[_name].contractAddress == address(0), "Contract already exists");
         contracts[_name] = ContractData({
             contractAddress: _contractAddress,
@@ -50,7 +52,7 @@ contract AddressProvider {
     /// @notice Removes a contract
     /// @dev Only called by the contract owner
     /// @param _name the name of the contract for reference
-    function removeContract(string memory _name) external onlyOwner {
+    function removeContract(string memory _name) external onlyOwner firewallProtected {
         ContractData memory contractData = contracts[_name];
         require(contracts[_name].contractAddress != address(0), "Contract does not exist");
         
@@ -68,7 +70,7 @@ contract AddressProvider {
     /// @notice Facilitates the change of ownership
     /// @dev Only called by the contract owner
     /// @param _newOwner the address of the new owner
-    function setOwner(address _newOwner) external onlyOwner {
+    function setOwner(address _newOwner) external onlyOwner firewallProtected {
         require(_newOwner != address(0), "Cannot be zero addr");
         owner = _newOwner;
     }

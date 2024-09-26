@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "./interfaces/ITNFT.sol";
 import "./interfaces/IBNFT.sol";
 import "./interfaces/IAuctionManager.sol";
@@ -22,10 +23,12 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 import "./libraries/DepositRootGenerator.sol";
 
 
 contract StakingManager is
+    VennFirewallConsumer,
     Initializable,
     IStakingManager,
     IBeaconUpgradeable,
@@ -80,7 +83,7 @@ contract StakingManager is
     /// @dev Deploys NFT contracts internally to ensure ownership is set to this contract
     /// @dev AuctionManager Contract must be deployed first
     /// @param _auctionAddress The address of the auction contract for interaction
-    function initialize(address _auctionAddress, address _depositContractAddress) external initializer {
+    function initialize(address _auctionAddress, address _depositContractAddress) external initializer firewallProtected {
         stakeAmount = 32 ether;
         maxBatchDepositSize = 25;
         isFullStakeEnabled = true;
@@ -92,9 +95,12 @@ contract StakingManager is
 
         auctionManager = IAuctionManager(_auctionAddress);
         depositContractEth2 = IDepositContract(_depositContractAddress);
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
-    function initializeOnUpgrade(address _nodeOperatorManager, address _etherFiAdmin) external onlyOwner {
+    function initializeOnUpgrade(address _nodeOperatorManager, address _etherFiAdmin) external onlyOwner firewallProtected {
         DEPRECATED_admin = address(0);
         nodeOperatorManager = _nodeOperatorManager;
         admins[_etherFiAdmin] = true;
@@ -104,7 +110,7 @@ contract StakingManager is
     /// @param _candidateBidIds IDs of the bids to be matched with each stake
     /// @return Array of the bid IDs that were processed and assigned
     function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, bool _enableRestaking)
-        external payable whenNotPaused nonReentrant returns (uint256[] memory)
+        external payable whenNotPaused nonReentrant firewallProtected returns (uint256[] memory)
     {
         require(isFullStakeEnabled, "DEPRECATED");
         require(msg.value > 0 && msg.value % stakeAmount == 0 && msg.value / stakeAmount > 0, "WRONG_STAKING_AMOUNT");
@@ -196,7 +202,7 @@ contract StakingManager is
         bytes[] calldata _pubKey,
         bytes[] calldata _signature,
         bytes32[] calldata _depositDataRootApproval
-    ) external payable {
+    ) external payable firewallProtected {
         require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
 
         for (uint256 x; x < _validatorId.length; ++x) {
@@ -245,7 +251,7 @@ contract StakingManager is
 
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
     /// @param _createEigenPod whether or not to create an associated eigenPod contract.
-    function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
+    function instantiateEtherFiNode(bool _createEigenPod) external firewallProtected returns (address) {
         require(msg.sender == address(nodesManager), "INCORRECT_CALLER");
 
         BeaconProxy proxy = new BeaconProxy(address(upgradableBeacon), "");
@@ -313,21 +319,21 @@ contract StakingManager is
         implementationContract = _newImplementation;
     }
 
-    function updateFullStakingStatus(bool _status) external onlyOwner {
+    function updateFullStakingStatus(bool _status) external onlyOwner firewallProtected {
         isFullStakeEnabled = _status;
     }
 
-    function pauseContract() external onlyAdmin { _pause(); }
-    function unPauseContract() external onlyAdmin { _unpause(); }
+    function pauseContract() external onlyAdmin firewallProtected { _pause(); }
+    function unPauseContract() external onlyAdmin firewallProtected { _unpause(); }
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         require(_address != address(0), "ZERO_ADDRESS");
         admins[_address] = _isAdmin;
     }
     
-    function setNodeOperatorManager(address _nodeOperateManager) external onlyAdmin {
+    function setNodeOperatorManager(address _nodeOperateManager) external onlyAdmin firewallProtected {
         require(_nodeOperateManager != address(0), "ZERO_ADDRESS");
         nodeOperatorManager = _nodeOperateManager;
     }
@@ -502,7 +508,14 @@ contract StakingManager is
             require(_depositRoot == onchainDepositRoot, "DEPOSIT_ROOT_CHANGED");
         }
     }
+    
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
 
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------

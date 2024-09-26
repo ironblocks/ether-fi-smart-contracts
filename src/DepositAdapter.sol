@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 
@@ -13,7 +15,7 @@ import "./interfaces/IWeETH.sol";
 import "./interfaces/IWETH.sol";
 import "./interfaces/IwstETH.sol";
 
-contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
+contract DepositAdapter is VennFirewallConsumer, UUPSUpgradeable, OwnableUpgradeable {
 
     ILiquidityPool public immutable liquidityPool;
     ILiquifier public immutable liquifier;
@@ -44,15 +46,18 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize() initializer external {
+    function initialize() initializer external firewallProtected {
         __Ownable_init();
         __UUPSUpgradeable_init();
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     /// @notice Deposit ETH for weETH
     /// @param _referral Address to credit rewards
     /// @return weEthAmount weETH received by the depositer
-    function depositETHForWeETH(address _referral) external payable returns (uint256) {
+    function depositETHForWeETH(address _referral) external payable firewallProtected returns (uint256) {
         uint256 eETHShares = liquidityPool.deposit{value: msg.value}(_referral);
         
         emit AdapterDeposit(msg.sender, msg.value, SourceOfFunds.ETH, _referral);
@@ -64,7 +69,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @param _amount Amount of WETH to deposit 
     /// @param _referral Address to credit referral
     /// @return weEthAmount weETH received by the depositer
-    function depositWETHForWeETH(uint256 _amount, address _referral) external returns (uint256) {
+    function depositWETHForWeETH(uint256 _amount, address _referral) external firewallProtected returns (uint256) {
         require(wETH.allowance(msg.sender, address(this)) >= _amount, "ALLOWANCE_EXCEEDED");
         require(wETH.balanceOf(msg.sender) >= _amount, "INSUFFICIENT_BALANCE");
         
@@ -83,7 +88,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @param _referral Address to credit referral
     /// @param _permit Permit signature
     /// @return weEthAmount weETH received by the depositer
-    function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
+    function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external firewallProtected returns (uint256) {
         try IERC20PermitUpgradeable(address(stETH)).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} 
         catch {
             if (_permit.deadline < block.timestamp) revert("PERMIT_EXPIRED");
@@ -107,7 +112,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @param _referral Address to credit referral
     /// @param _permit Permit signature
     /// @return weEthAmount weETH received by the depositer
-    function depositWstETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
+    function depositWstETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external firewallProtected returns (uint256) {
         try wstETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} 
         catch {
             if (_permit.deadline < block.timestamp) revert("PERMIT_EXPIRED");
@@ -143,4 +148,12 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
 }

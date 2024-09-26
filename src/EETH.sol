@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -8,12 +9,13 @@ import "@openzeppelin-upgradeable/contracts/utils/cryptography/EIP712Upgradeable
 import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 
 
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH {
+contract EETH is VennFirewallConsumer, IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH {
     using CountersUpgradeable for CountersUpgradeable.Counter;
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -64,15 +66,18 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _disableInitializers(); 
     }
 
-    function initialize(address _liquidityPool) external initializer {
+    function initialize(address _liquidityPool) external initializer firewallProtected {
         require(_liquidityPool != address(0), "No zero addresses");
         
         __UUPSUpgradeable_init();
         __Ownable_init();
         liquidityPool = ILiquidityPool(_liquidityPool);
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
-    function mintShares(address _user, uint256 _share) external onlyPoolContract {
+    function mintShares(address _user, uint256 _share) external onlyPoolContract firewallProtected {
         shares[_user] += _share;
         totalShares += _share;
 
@@ -80,7 +85,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         emit TransferShares(address(0), _user, _share);
     }
 
-    function burnShares(address _user, uint256 _share) external {
+    function burnShares(address _user, uint256 _share) external firewallProtected {
         require(msg.sender == address(liquidityPool) || msg.sender == _user, "Incorrect Caller");
         require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
         shares[_user] -= _share;
@@ -90,7 +95,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         emit TransferShares(_user, address(0), _share);
     }
 
-    function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) firewallProtected returns (bool) {
         _transfer(msg.sender, _recipient, _amount);
         return true;
     }
@@ -99,19 +104,19 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return allowances[_owner][_spender];
     }
 
-    function approve(address _spender, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function approve(address _spender, uint256 _amount) external override(IeETH, IERC20Upgradeable) firewallProtected returns (bool) {
         _approve(msg.sender, _spender, _amount);
         return true;
     }
 
-    function increaseAllowance(address _spender, uint256 _increaseAmount) external returns (bool) {
+    function increaseAllowance(address _spender, uint256 _increaseAmount) external firewallProtected returns (bool) {
         address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, _spender);
         _approve(owner, _spender,currentAllowance + _increaseAmount);
         return true;
     }
 
-    function decreaseAllowance(address _spender, uint256 _decreaseAmount) external returns (bool) {
+    function decreaseAllowance(address _spender, uint256 _decreaseAmount) external firewallProtected returns (bool) {
         address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, _spender);
         require(currentAllowance >= _decreaseAmount, "ERC20: decreased allowance below zero");
@@ -121,7 +126,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return true;
     }
 
-    function transferFrom(address _sender, address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function transferFrom(address _sender, address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) firewallProtected returns (bool) {
         uint256 currentAllowance = allowances[_sender][msg.sender];
         require(currentAllowance >= _amount, "TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
         unchecked {
@@ -194,17 +199,25 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         nonce.increment();
     }
 
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
+    
     //--------------------------------------------------------------------------------------
     //------------------------------------  SETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner {
+    function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner firewallProtected {
         for (uint i = 0; i < _spenders.length; i++) {
             whitelistedSpender[_spenders[i]] = _isWhitelisted;
         }
     }
 
-    function setBlacklistedRecipient(address[] calldata _recipients, bool _isBlacklisted) external onlyOwner {
+    function setBlacklistedRecipient(address[] calldata _recipients, bool _isBlacklisted) external onlyOwner firewallProtected {
         for (uint i = 0; i < _recipients.length; i++) {
             blacklistedRecipient[_recipients[i]] = _isBlacklisted;
         }
@@ -266,4 +279,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         require(msg.sender == address(liquidityPool), "Only pool contract function");
         _;
     }
+
+
 }

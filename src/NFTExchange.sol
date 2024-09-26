@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
@@ -10,13 +11,14 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 
 /**
  * @title Escrow
  * @dev A contract for escrowing NFT trades between a multi-sig wallet and a staker.
  */
-contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract NFTExchange is VennFirewallConsumer, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -44,14 +46,17 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
      * @param _tNft The address of the T-NFT contract.
      * @param _membershipNft The address of the membership NFT contract.
      */
-    function initialize(address _tNft, address _membershipNft, address _nodesMgr) external initializer {
+    function initialize(address _tNft, address _membershipNft, address _nodesMgr) external initializer firewallProtected {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
         tNft = IERC721(_tNft);
         membershipNft = IMembershipNFT(_membershipNft);
         nodesMgr = IEtherFiNodesManager(_nodesMgr);
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     /**
      * @dev Allows the owner to list membership NFTs for sale.
@@ -59,7 +64,7 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
      * @param _targetTNftTokenIds The token IDs of the T-NFTs to be traded for.
      * @param _reservedBuyers The addresses of the reserved buyers for each NFT.
      */
-    function listForSale(uint256[] calldata _mNftTokenIds, uint256[] calldata _targetTNftTokenIds, address[] calldata _reservedBuyers) external onlyAdmin {
+    function listForSale(uint256[] calldata _mNftTokenIds, uint256[] calldata _targetTNftTokenIds, address[] calldata _reservedBuyers) external onlyAdmin firewallProtected {
         require(_mNftTokenIds.length == _reservedBuyers.length, "Input arrays must be the same length");
         for (uint256 i = 0; i < _mNftTokenIds.length; i++) {
             uint256 mNftTokenId = _mNftTokenIds[i];
@@ -76,7 +81,7 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
      * @param _tnftTokenIds The token IDs of the T-NFTs to trade.
      * @param _mNftTokenIds The token IDs of the membership NFTs to purchase.
      */
-    function buy(uint256[] calldata _tnftTokenIds, uint256[] calldata _mNftTokenIds) external nonReentrant {
+    function buy(uint256[] calldata _tnftTokenIds, uint256[] calldata _mNftTokenIds) external nonReentrant firewallProtected {
         require(_tnftTokenIds.length == _mNftTokenIds.length, "Input arrays must be the same length");
         for (uint256 i = 0; i < _mNftTokenIds.length; i++) {
             uint256 tnftTokenId = _tnftTokenIds[i];
@@ -100,7 +105,7 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
      * @dev Allows the owner to delist membership NFTs from sale.
      * @param _mNftTokenIds The token IDs of the membership NFTs to delist.
      */
-    function delist(uint256[] calldata _mNftTokenIds) external onlyAdmin nonReentrant {
+    function delist(uint256[] calldata _mNftTokenIds) external onlyAdmin nonReentrant firewallProtected {
         for (uint256 i = 0; i < _mNftTokenIds.length; i++) {
             uint256 tokenId = _mNftTokenIds[i];
             require(reservedBuyers[tokenId] != address(0), "Token is not currently listed for sale");
@@ -120,13 +125,21 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
     /// @notice Updates the address of the admin
     /// @param _newAdmin the new address to set as admin
-    function updateAdmin(address _newAdmin) external onlyOwner {
+    function updateAdmin(address _newAdmin) external onlyOwner firewallProtected {
         require(_newAdmin != address(0), "Cannot be address zero");
         admin = _newAdmin;
     }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 
     //--------------------------------------------------------------------------------------

@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC1155/ERC1155Upgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-
+import "@openzeppelin/contracts/utils/Context.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
 
 import "forge-std/console.sol";
 
-contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ERC1155Upgradeable, IMembershipNFT {
+contract MembershipNFT is VennFirewallConsumer, Initializable, OwnableUpgradeable, UUPSUpgradeable, ERC1155Upgradeable, IMembershipNFT {
 
     IMembershipManager membershipManager;
     uint32 public nextMintTokenId;
@@ -50,23 +51,26 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         _disableInitializers();
     }
 
-    function initialize(string calldata _metadataURI, address _membershipManagerInstance) external initializer {
+    function initialize(string calldata _metadataURI, address _membershipManagerInstance) external initializer firewallProtected {
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ERC1155_init(_metadataURI);
         nextMintTokenId = 1;
         maxTokenId = 1000;
         membershipManager = IMembershipManager(_membershipManagerInstance);
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
-    function initializeOnUpgrade(address _liquidityPoolAddress) external onlyOwner {
+    function initializeOnUpgrade(address _liquidityPoolAddress) external onlyOwner firewallProtected {
         require(_liquidityPoolAddress != address(0), "No zero addresses");
         liquidityPool = ILiquidityPool(_liquidityPoolAddress);
         admins[DEPRECATED_admin] = true;
         DEPRECATED_admin = address(0);
     }
 
-    function mint(address _to, uint256 _amount) external onlyMembershipManagerContract returns (uint256) {
+    function mint(address _to, uint256 _amount) external onlyMembershipManagerContract firewallProtected returns (uint256) {
         if (mintingPaused || nextMintTokenId > maxTokenId) revert MintingIsPaused();
 
         uint32 tokenId = nextMintTokenId++;
@@ -74,12 +78,12 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         return tokenId;
     }
 
-    function burn(address _from, uint256 _tokenId, uint256 _amount) onlyMembershipManagerContract external {
+    function burn(address _from, uint256 _tokenId, uint256 _amount) onlyMembershipManagerContract external firewallProtected {
         _burn(_from, _tokenId, _amount);
     }
 
     /// @dev locks a token from being transferred for a number of blocks
-    function incrementLock(uint256 _tokenId, uint32 _blocks) onlyMembershipManagerContract external {
+    function incrementLock(uint256 _tokenId, uint32 _blocks) onlyMembershipManagerContract external firewallProtected {
         uint32 target = uint32(block.number) + _blocks;
 
         // don't accidentally shorten an existing lock
@@ -89,7 +93,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         }
     }
 
-    function processDepositFromEapUser(address _user, uint32  _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) onlyMembershipManagerContract external {
+    function processDepositFromEapUser(address _user, uint32  _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) onlyMembershipManagerContract external firewallProtected {
         if (eapDepositProcessed[_user] == true) revert InvalidEAPRollover();
         bytes32 leaf = keccak256(abi.encodePacked(_user,_snapshotEthAmount, _points, _eapDepositBlockNumber));
         if (!MerkleProof.verify(_merkleProof, eapMerkleRoot, leaf)) revert InvalidEAPRollover(); 
@@ -101,14 +105,14 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     //--------------------------------------  SETTER  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function setMaxTokenId(uint32 _maxTokenId) external onlyAdmin() {
+    function setMaxTokenId(uint32 _maxTokenId) external onlyAdmin() firewallProtected {
         maxTokenId = _maxTokenId;
     }
 
     /// @notice Set up for EAP migration; Updates the merkle root, Set the required loyalty points per tier
     /// @param _newMerkleRoot new merkle root used to verify the EAP user data (deposits, points)
     /// @param _requiredEapPointsPerEapDeposit required EAP points per deposit for each tier
-    function setUpForEap(bytes32 _newMerkleRoot, uint64[] calldata _requiredEapPointsPerEapDeposit) external onlyAdmin {
+    function setUpForEap(bytes32 _newMerkleRoot, uint64[] calldata _requiredEapPointsPerEapDeposit) external onlyAdmin firewallProtected {
         bytes32 oldMerkleRoot = eapMerkleRoot;
         eapMerkleRoot = _newMerkleRoot;
         requiredEapPointsPerEapDeposit = _requiredEapPointsPerEapDeposit;
@@ -117,12 +121,12 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         require(_address != address(0), "Cannot be address zero");
         admins[_address] = _isAdmin;
     }
     
-    function setMintingPaused(bool _paused) external onlyAdmin {
+    function setMintingPaused(bool _paused) external onlyAdmin firewallProtected {
         mintingPaused = _paused;
         emit MintingPaused(_paused);
     }
@@ -368,12 +372,12 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     }
 
     /// @dev opensea contract-level metadata
-    function setContractMetadataURI(string calldata _newURI) external onlyAdmin {
+    function setContractMetadataURI(string calldata _newURI) external onlyAdmin firewallProtected {
         contractMetadataURI = _newURI;
     }
 
     /// @dev erc1155 metadata extension
-    function setMetadataURI(string calldata _newURI) external onlyAdmin {
+    function setMetadataURI(string calldata _newURI) external onlyAdmin firewallProtected {
         _setURI(_newURI);
     }
 
@@ -385,6 +389,14 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     /// @dev alert opensea to a metadata update
     function alertBatchMetadataUpdate(uint256 startID, uint256 endID) public onlyAdmin {
         emit BatchMetadataUpdate(startID, endID);
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 
     //--------------------------------------------------------------------------------------

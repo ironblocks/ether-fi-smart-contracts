@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
@@ -9,8 +10,10 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 contract AuctionManager is
+    VennFirewallConsumer,
     Initializable,
     IAuctionManager,
     PausableUpgradeable,
@@ -67,7 +70,7 @@ contract AuctionManager is
     /// @notice Initialize to set variables on deployment
     function initialize(
         address _nodeOperatorManagerContract
-    ) external initializer {
+    ) external initializer firewallProtected {
         require(_nodeOperatorManagerContract != address(0), "No Zero Addresses");
         
         whitelistBidAmount = 0.001 ether;
@@ -82,9 +85,12 @@ contract AuctionManager is
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
-    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _etherFiAdminContractAddress, address _nodeOperatorManagerAddress) external onlyOwner { 
+    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _etherFiAdminContractAddress, address _nodeOperatorManagerAddress) external onlyOwner firewallProtected { 
         require(_membershipManagerContractAddress != address(0) && _etherFiAdminContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
         membershipManagerContractAddress = _membershipManagerContractAddress;
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerAddress);
@@ -100,7 +106,7 @@ contract AuctionManager is
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmountPerBid
-    ) external payable whenNotPaused nonReentrant returns (uint256[] memory) {
+    ) external payable whenNotPaused nonReentrant firewallProtected returns (uint256[] memory) {
         require(_bidSize > 0, "Bid size is too small");
         if (whitelistEnabled) {
             require(
@@ -162,7 +168,7 @@ contract AuctionManager is
     /// @notice Cancels bids in a batch by calling the 'cancelBid' function multiple times
     /// @dev Calls an internal function to perform the cancel
     /// @param _bidIds the ID's of the bids to cancel
-    function cancelBidBatch(uint256[] calldata _bidIds) external whenNotPaused {
+    function cancelBidBatch(uint256[] calldata _bidIds) external whenNotPaused firewallProtected {
         for (uint256 i = 0; i < _bidIds.length; i++) {
             _cancelBid(_bidIds[i]);
         }
@@ -180,7 +186,7 @@ contract AuctionManager is
     /// @param _bidId the ID of the bid being removed from the auction (since it has been selected)
     function updateSelectedBidInformation(
         uint256 _bidId
-    ) external onlyStakingManagerContract {
+    ) external onlyStakingManagerContract firewallProtected {
         Bid storage bid = bids[_bidId];
         require(bid.isActive, "The bid is not active");
 
@@ -192,7 +198,7 @@ contract AuctionManager is
     /// @param _bidId the ID of the bid which was matched to the cancelled stake.
     function reEnterAuction(
         uint256 _bidId
-    ) external onlyStakingManagerContract {
+    ) external onlyStakingManagerContract firewallProtected {
         Bid storage bid = bids[_bidId];
         require(!bid.isActive, "Bid already active");
 
@@ -206,7 +212,7 @@ contract AuctionManager is
     /// @param _bidId the ID of the validator
     function processAuctionFeeTransfer(
         uint256 _bidId
-    ) external onlyStakingManagerContract {
+    ) external onlyStakingManagerContract firewallProtected {
         uint256 amount = bids[_bidId].amount;
         uint256 newAccumulatedRevenue = accumulatedRevenue + amount;
         if (newAccumulatedRevenue >= accumulatedRevenueThreshold) {
@@ -218,7 +224,7 @@ contract AuctionManager is
         }
     }
 
-    function transferAccumulatedRevenue() external onlyAdmin {
+    function transferAccumulatedRevenue() external onlyAdmin firewallProtected {
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;
         (bool sent, ) = membershipManagerContractAddress.call{value: transferAmount}("");
@@ -240,12 +246,12 @@ contract AuctionManager is
     }
 
     //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyAdmin firewallProtected {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyAdmin firewallProtected {
         _unpause();
     }
 
@@ -303,7 +309,7 @@ contract AuctionManager is
     /// @param _stakingManagerContractAddress new stakingManagerContract address
     function setStakingManagerContractAddress(
         address _stakingManagerContractAddress
-    ) external onlyOwner {
+    ) external onlyOwner firewallProtected {
         require(address(stakingManagerContractAddress) == address(0), "Address already set");
         require(_stakingManagerContractAddress != address(0), "No zero addresses");
         stakingManagerContractAddress = _stakingManagerContractAddress;
@@ -311,7 +317,7 @@ contract AuctionManager is
 
     /// @notice Updates the minimum bid price for a non-whitelisted bidder
     /// @param _newMinBidAmount the new amount to set the minimum bid price as
-    function setMinBidPrice(uint64 _newMinBidAmount) external onlyAdmin {
+    function setMinBidPrice(uint64 _newMinBidAmount) external onlyAdmin firewallProtected {
         require(_newMinBidAmount < maxBidAmount, "Min bid exceeds max bid");
         require(_newMinBidAmount >= whitelistBidAmount, "Min bid less than whitelist bid amount");
         minBidAmount = _newMinBidAmount;
@@ -319,14 +325,14 @@ contract AuctionManager is
 
     /// @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
     /// @param _newMaxBidAmount the new amount to set the maximum bid price as
-    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyAdmin {
+    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyAdmin firewallProtected {
         require(_newMaxBidAmount > minBidAmount, "Min bid exceeds max bid");
         maxBidAmount = _newMaxBidAmount;
     }
 
     /// @notice Updates the accumulated revenue threshold that will trigger a transfer to MembershipNFT contract
     /// @param _newThreshold the new threshold to set
-    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyAdmin {
+    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyAdmin firewallProtected {
         accumulatedRevenueThreshold = _newThreshold;
     }
 
@@ -334,12 +340,12 @@ contract AuctionManager is
     /// @param _newAmount the new amount to set the minimum bid price as
     function updateWhitelistMinBidAmount(
         uint128 _newAmount
-    ) external onlyOwner {
+    ) external onlyOwner firewallProtected {
         require(_newAmount < minBidAmount && _newAmount > 0, "Invalid Amount");
         whitelistBidAmount = _newAmount;
     }
 
-    function updateNodeOperatorManager(address _address) external onlyOwner {
+    function updateNodeOperatorManager(address _address) external onlyOwner firewallProtected {
         nodeOperatorManager = INodeOperatorManager(
             _address
         );
@@ -347,7 +353,7 @@ contract AuctionManager is
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         require(_address != address(0), "Cannot be address zero");
         admins[_address] = _isAdmin;
     }
@@ -364,5 +370,13 @@ contract AuctionManager is
     modifier onlyAdmin() {
         require(admins[msg.sender], "Caller is not the admin");
         _;
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 }

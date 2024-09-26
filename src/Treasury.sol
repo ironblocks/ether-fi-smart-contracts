@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "./interfaces/ITreasury.sol";
 
-contract Treasury is ITreasury, Ownable {
+contract Treasury is VennFirewallConsumer, ITreasury, Ownable {
     
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @notice Function allows only the owner to withdraw all the funds in the contract
-    function withdraw(uint256 _amount, address _to) external onlyOwner {
+    function withdraw(uint256 _amount, address _to) external onlyOwner firewallProtected {
         require(
             _amount <= address(this).balance,
             "the balance is lower than the requested amount"

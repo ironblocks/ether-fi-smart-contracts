@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-
+import "@openzeppelin/contracts/utils/Context.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 
 
-contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
+contract WithdrawRequestNFT is VennFirewallConsumer, ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
 
     ILiquidityPool public liquidityPool;
     IeETH public eETH; 
@@ -35,7 +36,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _disableInitializers();
     }
 
-    function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManagerAddress) initializer external {
+    function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManagerAddress) initializer external firewallProtected {
         require(_liquidityPoolAddress != address(0), "No zero addresses");
         require(_eEthAddress != address(0), "No zero addresses");
         __ERC721_init("Withdraw Request NFT", "WithdrawRequestNFT");
@@ -46,7 +47,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         eETH = IeETH(_eEthAddress);
         membershipManager = IMembershipManager(_membershipManagerAddress);
         nextRequestId = 1;
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
     /// @dev liquidity pool contract will call this function when a user requests withdraw
@@ -55,7 +59,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param recipient address to recieve with WithdrawRequestNFT
     /// @param fee fee to be subtracted from amount when recipient calls claimWithdraw
     /// @return uint256 id of the withdraw request
-    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidtyPool returns (uint256) {
+    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidtyPool firewallProtected returns (uint256) {
         uint256 requestId = nextRequestId++;
         uint32 feeGwei = uint32(fee / 1 gwei);
 
@@ -84,7 +88,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) external {
+    function claimWithdraw(uint256 tokenId) external firewallProtected {
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
     
@@ -114,14 +118,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, amountBurnedShare, recipient, fee);
     }
 
-    function batchClaimWithdraw(uint256[] calldata tokenIds) external {
+    function batchClaimWithdraw(uint256[] calldata tokenIds) external firewallProtected {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
         }
     }
 
     // a function to transfer accumulated shares to admin
-    function burnAccumulatedDustEEthShares() external onlyAdmin {
+    function burnAccumulatedDustEEthShares() external onlyAdmin firewallProtected {
         require(eETH.totalShares() > accumulatedDustEEthShares, "Inappropriate burn");
         uint256 amount = accumulatedDustEEthShares;
         accumulatedDustEEthShares = 0;
@@ -132,7 +136,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // Given an invalidated withdrawal request NFT of ID `requestId`:,
     // - burn the NFT
     // - withdraw its ETH to the `recipient`
-    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyOwner {
+    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyOwner firewallProtected {
         require(!_requests[requestId].isValid, "Request is valid");
         require(ownerOf(requestId) != address(0), "Already Claimed");
 
@@ -167,11 +171,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _requests[requestId].isValid;
     }
 
-    function finalizeRequests(uint256 requestId) external onlyAdmin {
+    function finalizeRequests(uint256 requestId) external onlyAdmin firewallProtected {
         lastFinalizedRequestId = uint32(requestId);
     }
 
-    function invalidateRequest(uint256 requestId) external onlyAdmin {
+    function invalidateRequest(uint256 requestId) external onlyAdmin firewallProtected {
         require(isValid(requestId), "Request is not valid");
 
         if (isFinalized(requestId)) {
@@ -184,14 +188,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestInvalidated(uint32(requestId));
     }
 
-    function validateRequest(uint256 requestId) external onlyAdmin {
+    function validateRequest(uint256 requestId) external onlyAdmin firewallProtected {
         require(!_requests[requestId].isValid, "Request is valid");
         _requests[requestId].isValid = true;
 
         emit WithdrawRequestValidated(uint32(requestId));
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         require(_address != address(0), "Cannot be address zero");
         admins[_address] = _isAdmin;
     }
@@ -208,6 +212,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 
     modifier onlyAdmin() {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -13,7 +14,7 @@ import "./eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
 import "forge-std/console.sol";
 
-contract EtherFiNode is IEtherFiNode, IERC1271 {
+contract EtherFiNode is VennFirewallConsumer, IEtherFiNode, IERC1271 {
     address public etherFiNodesManager;
 
     uint256 public DEPRECATED_localRevenueIndex;
@@ -69,7 +70,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     receive() external payable {}
 
     /// @dev called once immediately after creating a new instance of a EtheriNode beacon proxy
-    function initialize(address _etherFiNodesManager) external {
+    function initialize(address _etherFiNodesManager) external firewallProtected {
         require(DEPRECATED_phase == VALIDATOR_PHASE.NOT_INITIALIZED, "ALREADY_INITIALIZED");
         require(etherFiNodesManager == address(0), "ALREADY_INITIALIZED");
         require(_etherFiNodesManager != address(0), "NO_ZERO_ADDRESS");
@@ -81,7 +82,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     // if `_validatorId` != 0, the v0 safe contract currently is tied to the validator with its id = `_validatorId`
     // this function updates it to v1 so that it can be used by multiple validators 
     // else `_validatorId` == 0, this safe is not tied to any validator yet
-    function migrateVersion(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external onlyEtherFiNodeManagerContract {
+    function migrateVersion(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external onlyEtherFiNodeManagerContract firewallProtected {
         if (version != 0) return;
         
         DEPRECATED_exitRequestTimestamp = 0;
@@ -148,7 +149,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     function unRegisterValidator(
         uint256 _validatorId,
         IEtherFiNodesManager.ValidatorInfo memory _info
-    ) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bool) {        
+    ) external onlyEtherFiNodeManagerContract ensureLatestVersion firewallProtected returns (bool) {        
         require(_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN || _info.phase == VALIDATOR_PHASE.NOT_INITIALIZED, "invalid phase");
 
         // If the phase changed from EXITED to FULLY_WITHDRAWN, decrement the counter
@@ -204,14 +205,14 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
 
     /// @notice process the exit
     // TODO: make it permission-less call
-    function processNodeExit(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bytes32[] memory fullWithdrawalRoots) {
+    function processNodeExit(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion firewallProtected returns (bytes32[] memory fullWithdrawalRoots) {
         if (isRestakingEnabled) {
             fullWithdrawalRoots = _queueEigenpodFullWithdrawal();
             require(fullWithdrawalRoots.length == 1, "NO_FULLWITHDRAWAL_QUEUED");
         }
     }
 
-    function processFullWithdraw(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion {
+    function processFullWithdraw(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion firewallProtected {
         updateNumberOfAssociatedValidators(0, 1);
 
         if (isRestakingEnabled) {
@@ -221,7 +222,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         }
     }
 
-    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
+    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract firewallProtected {
         IDelegationManager.Withdrawal[] memory _withdrawals = new IDelegationManager.Withdrawal[](1);
         _withdrawals[0] = withdrawals;
         uint256[] memory _middlewareTimesIndexes = new uint256[](1);
@@ -229,7 +230,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return _completeQueuedWithdrawals(_withdrawals, _middlewareTimesIndexes, _receiveAsTokens);
     }
 
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract firewallProtected {
         return _completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, _receiveAsTokens);
     }
 
@@ -276,7 +277,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         address _operator, uint256 _operatorAmount,
         address _tnftHolder, uint256 _tnftAmount,
         address _bnftHolder, uint256 _bnftAmount
-    ) external onlyEtherFiNodeManagerContract ensureLatestVersion {
+    ) external onlyEtherFiNodeManagerContract ensureLatestVersion firewallProtected {
         // the recipients of the funds must be able to receive the fund
         // if it is a smart contract, they should implement either receive() or fallback() properly
         // It's designed to prevent malicious actors from pausing the withdrawals
@@ -327,8 +328,8 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     ) public view returns (uint256) {
         if (_tNftExitRequestTimestamp == 0) return 0;
 
-        uint128 _penaltyPrinciple = IEtherFiNodesManager(etherFiNodesManager).nonExitPenaltyPrincipal();
-        uint64 _dailyPenalty = IEtherFiNodesManager(etherFiNodesManager).nonExitPenaltyDailyRate();
+        uint128 _penaltyPrinciple = IEtherFiNodesManager(etherFiNodesManager).nonExitPenaltyPrinc();
+        uint64 _dailyPenalty = IEtherFiNodesManager(etherFiNodesManager).nonExitPenaltyRate();
         uint256 daysElapsed = _getDaysPassedSince(_tNftExitRequestTimestamp, _bNftExitRequestTimestamp);
         if (daysElapsed > 365) {
             return _penaltyPrinciple;
@@ -386,7 +387,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return safeBalance + claimableBalance;
     }
 
-    function moveFundsToManager(uint256 _amount) external onlyEtherFiNodeManagerContract {
+    function moveFundsToManager(uint256 _amount) external onlyEtherFiNodeManagerContract firewallProtected {
         (bool sent, ) = etherFiNodesManager.call{value: _amount, gas: 6000}("");
         require(sent, "ETH_SEND_FAILED");
     }
@@ -497,11 +498,11 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     //-------------------------------- CALL FORWARDING  ------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function callEigenPod(bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+    function callEigenPod(bytes calldata _data) external onlyEtherFiNodeManagerContract firewallProtected returns (bytes memory) {
         return Address.functionCall(eigenPod, _data);
     }
 
-    function forwardCall(address _to, bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+    function forwardCall(address _to, bytes calldata _data) external onlyEtherFiNodeManagerContract firewallProtected returns (bytes memory) {
         return Address.functionCall(_to, _data);
     }
     
@@ -598,13 +599,13 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
 
     /// @notice Start a PEPE pod checkpoint balance proof. A new proof cannot be started until
     ///         the previous proof is completed
-    function startCheckpoint(bool _revertIfNoBalance) external onlyEtherFiNodeManagerContract {
+    function startCheckpoint(bool _revertIfNoBalance) external onlyEtherFiNodeManagerContract firewallProtected {
         IEigenPod(eigenPod).startCheckpoint(_revertIfNoBalance);
     }
 
     // @notice you can delegate 1 additional wallet that is allowed to call startCheckpoint() and
     //         verifyWithdrawalCredentials() on behalf of this pod
-    function setProofSubmitter(address _newProofSubmitter) external onlyEtherFiNodeManagerContract {
+    function setProofSubmitter(address _newProofSubmitter) external onlyEtherFiNodeManagerContract firewallProtected {
         IEigenPod(eigenPod).setProofSubmitter(_newProofSubmitter);
     }
 

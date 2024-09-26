@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "../src/interfaces/INodeOperatorManager.sol";
 import "../src/interfaces/IAuctionManager.sol";
 import "../src/LiquidityPool.sol";
@@ -8,9 +9,9 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-
+import "@openzeppelin/contracts/utils/Context.sol";
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
-contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable {
+contract NodeOperatorManager is VennFirewallConsumer, INodeOperatorManager, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable {
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -45,11 +46,14 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     }
 
     /// @notice initializes contract
-    function initialize() external initializer {
+    function initialize() external initializer firewallProtected {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     /// @notice Migrates operator details from previous contract
     /// @dev Our previous node operator contract was non upgradeable. We will be moving to an upgradeable version but need this
@@ -59,7 +63,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         bytes[] memory _ipfsHash,
         uint64[] memory _totalKeys,
         uint64[] memory _keysUsed
-    ) external onlyOwner {
+    ) external onlyOwner firewallProtected {
         require((_operator.length == _ipfsHash.length) && (_operator.length == _totalKeys.length) && (_operator.length == _keysUsed.length), "Invalid lengths");
         for(uint256 x = 0; x < _operator.length; x++) {
             require(!registered[_operator[x]], "Already registered");
@@ -113,7 +117,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     /// @return The ipfs index available for the validator
     function fetchNextKeyIndex(
         address _user
-    ) external onlyAuctionManagerContract returns (uint64) {
+    ) external onlyAuctionManagerContract firewallProtected returns (uint64) {
         KeyData storage keyData = addressToOperatorData[_user];
         uint64 totalKeys = keyData.totalKeys;
         require(
@@ -138,7 +142,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         address[] memory _users, 
         LiquidityPool.SourceOfFunds[] memory _approvedTags, 
         bool[] memory _approvals
-    ) external onlyAdmin {
+    ) external onlyAdmin firewallProtected {
         require(_users.length == _approvedTags.length && _users.length == _approvals.length, "Invalid array lengths");
 
         for(uint256 x; x < _approvedTags.length; x++) {
@@ -149,7 +153,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Adds an address to the whitelist
     /// @param _address Address of the user to add
-    function addToWhitelist(address _address) external onlyAdmin {
+    function addToWhitelist(address _address) external onlyAdmin firewallProtected {
         whitelistedAddresses[_address] = true;
 
         emit AddedToWhitelist(_address);
@@ -157,19 +161,19 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Removed an address from the whitelist
     /// @param _address Address of the user to remove
-    function removeFromWhitelist(address _address) external onlyAdmin {
+    function removeFromWhitelist(address _address) external onlyAdmin firewallProtected {
         whitelistedAddresses[_address] = false;
 
         emit RemovedFromWhitelist(_address);
     }
 
     //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyAdmin firewallProtected {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyAdmin firewallProtected {
         _unpause();
     }
 
@@ -237,7 +241,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         require(_address != address(0), "Cannot be address zero");
         admins[_address] = _isAdmin;
     }
@@ -249,7 +253,14 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
+    
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
 
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------

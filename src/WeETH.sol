@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider {
+contract WeETH is VennFirewallConsumer, ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -32,7 +34,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @notice Initializes the contract with the specified liquidity pool and eETH addresses
     /// @param _liquidityPool The address of the liquidity pool
     /// @param _eETH The address of the eETH contract
-    function initialize(address _liquidityPool, address _eETH) external initializer {
+    function initialize(address _liquidityPool, address _eETH) external initializer firewallProtected {
         require(_liquidityPool != address(0), "No zero addresses");
         require(_eETH != address(0), "No zero addresses");
         
@@ -42,7 +44,10 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         __Ownable_init();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     /// @dev name changed from the version initially deployed
     function name() public view virtual override returns (string memory) {
@@ -64,7 +69,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @param _eETHAmount the amount of eEth to wrap
     /// @return returns the amount of weEth the user receives
     function wrapWithPermit(uint256 _eETHAmount, ILiquidityPool.PermitInput calldata _permit)
-        external
+        external firewallProtected
         returns (uint256)
     {
         eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s);
@@ -74,7 +79,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @notice Unwraps weETH
     /// @param _weETHAmount the amount of weETH to unwrap
     /// @return returns the amount of eEth the user receives
-    function unwrap(uint256 _weETHAmount) external returns (uint256) {
+    function unwrap(uint256 _weETHAmount) external firewallProtected returns (uint256) {
         require(_weETHAmount > 0, "Cannot unwrap a zero amount");
         uint256 eETHAmount = liquidityPool.amountForShare(_weETHAmount);
         _burn(msg.sender, _weETHAmount);
@@ -125,7 +130,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @notice Sets the whitelisted status for a list of addresses
     /// @param _spenders An array of spender addresses
     /// @param _isWhitelisted Boolean value to set the whitelisted status
-    function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner {
+    function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner firewallProtected {
         for (uint i = 0; i < _spenders.length; i++) {
             whitelistedSpender[_spenders[i]] = _isWhitelisted;
         }
@@ -134,7 +139,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @notice Sets the blacklisted status for a list of addresses
     /// @param _recipients An array of recipient addresses
     /// @param _isBlacklisted Boolean value to set the blacklisted status
-    function setBlacklistedRecipient(address[] calldata _recipients, bool _isBlacklisted) external onlyOwner {
+    function setBlacklistedRecipient(address[] calldata _recipients, bool _isBlacklisted) external onlyOwner firewallProtected {
         for (uint i = 0; i < _recipients.length; i++) {
             blacklistedRecipient[_recipients[i]] = _isBlacklisted;
         }
@@ -168,5 +173,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @return The address of the current implementation   
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 }

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 import "src/interfaces/IEtherFiNodesManager.sol";
 import "src/eigenlayer-interfaces/IEigenPod.sol";
@@ -11,20 +13,23 @@ import "src/eigenlayer-interfaces/IEigenPodManager.sol";
 
 import "src/helpers/AddressProvider.sol";
 
-contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract EtherFiViewer is VennFirewallConsumer, Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     AddressProvider addressProvider;
 
     IEtherFiNodesManager nodesManager;
 
-    function initialize(address _addressProvider) external initializer {
+    function initialize(address _addressProvider) external initializer firewallProtected {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
         addressProvider = AddressProvider(_addressProvider);
 
         nodesManager = IEtherFiNodesManager(addressProvider.getContractAddress("EtherFiNodesManager"));
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     function _getDelegationManager() internal view returns (IDelegationManager) {
         return nodesManager.delegationManager();
@@ -160,5 +165,13 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
 
 }

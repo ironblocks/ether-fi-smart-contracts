@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 
@@ -9,6 +10,7 @@ import "@openzeppelin-upgradeable/contracts/token/ERC721/IERC721ReceiverUpgradea
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 import "./interfaces/IRegulationsManager.sol";
 import "./interfaces/IStakingManager.sol";
@@ -24,7 +26,7 @@ import "./interfaces/IAuctionManager.sol";
 import "./interfaces/ILiquifier.sol";
 import "forge-std/console.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
+contract LiquidityPool is VennFirewallConsumer, Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -111,7 +113,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueInLp += uint128(msg.value);
     }
 
-    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
+    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer firewallProtected {
         if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) revert DataNotSet();
         
         __Ownable_init();
@@ -129,9 +131,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
         admins[_etherFiAdminContract] = true;
         isLpBnftHolder = false;
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
-    function initializeOnUpgrade(address _auctionManager, address _liquifier) external onlyOwner { 
+    function initializeOnUpgrade(address _auctionManager, address _liquifier) external onlyOwner firewallProtected { 
         require(_auctionManager != address(0) && _liquifier != address(0), "Invalid params");
 
         auctionManager = IAuctionManager(_auctionManager);
@@ -139,7 +144,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     // Used by eETH staking flow
-    function deposit() external payable returns (uint256) {
+    function deposit() external payable firewallProtected returns (uint256) {
         return deposit(address(0));
     }
 
@@ -162,7 +167,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     // Used by ether.fan staking flow
-    function deposit(address _user, address _referral) external payable whenNotPaused returns (uint256) {
+    function deposit(address _user, address _referral) external payable whenNotPaused firewallProtected returns (uint256) {
         require(msg.sender == address(membershipManager), "Incorrect Caller");
         require(_user == address(membershipManager) || _isWhitelisted(_user), "Invalid User");
 
@@ -176,7 +181,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _recipient the recipient who will receives the ETH
     /// @param _amount the amount to withdraw from contract
     /// it returns the amount of shares burned
-    function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
+    function withdraw(address _recipient, uint256 _amount) external whenNotPaused firewallProtected returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
         require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager), "Incorrect Caller");
         if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
@@ -222,6 +227,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit)
         external
         whenNotPaused
+        firewallProtected
         returns (uint256)
     {
         eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s);
@@ -254,7 +260,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     // Step 2: create the keys using the desktop app
     // Step 3: [Register] register the validator keys sending 1 ETH to the eth deposit contract
     // Step 4: wait for the oracle to approve and send the rest 31 ETH to the eth deposit contract
-    function batchDepositAsBnftHolder(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external payable whenNotPaused returns (uint256[] memory) {
+    function batchDepositAsBnftHolder(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external payable whenNotPaused firewallProtected returns (uint256[] memory) {
         return batchDepositAsBnftHolder(_candidateBidIds, _numberOfValidators, 0);
     }
 
@@ -286,12 +292,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         IStakingManager.DepositData[] calldata _registerValidatorDepositData,
         bytes32[] calldata _depositDataRootApproval,
         bytes[] calldata _signaturesForApprovalDeposit
-    ) external whenNotPaused {
+    ) external whenNotPaused firewallProtected {
         require(!isLpBnftHolder, "IncorrectBnftMode");
         return _batchRegister(_depositRoot, _validatorIds, _registerValidatorDepositData, _depositDataRootApproval, _signaturesForApprovalDeposit, msg.sender);
     }
 
-    function batchDepositWithLiquidityPoolAsBnftHolder(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external whenNotPaused returns (uint256[] memory) {
+    function batchDepositWithLiquidityPoolAsBnftHolder(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external whenNotPaused firewallProtected returns (uint256[] memory) {
         return batchDepositWithLiquidityPoolAsBnftHolder(_candidateBidIds, _numberOfValidators, 0);
     }
 
@@ -306,7 +312,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         IStakingManager.DepositData[] calldata _registerValidatorDepositData,
         bytes32[] calldata _depositDataRootApproval,
         bytes[] calldata _signaturesForApprovalDeposit
-    ) external whenNotPaused {
+    ) external whenNotPaused firewallProtected {
         require(isLpBnftHolder, "IncorrectBnftMode");
         return _batchRegister(_depositRoot, _validatorIds, _registerValidatorDepositData, _depositDataRootApproval, _signaturesForApprovalDeposit, address(this));
     }
@@ -360,7 +366,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256[] memory _validatorIds, 
         bytes[] calldata _pubKey,
         bytes[] calldata _signature
-    ) external onlyAdmin whenNotPaused {
+    ) external onlyAdmin whenNotPaused firewallProtected {
         require(_validatorIds.length == _pubKey.length && _validatorIds.length == _signature.length, "lengths differ");
 
         bytes32[] memory depositDataRootApproval = new bytes32[](_validatorIds.length);
@@ -380,11 +386,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice Cancels a BNFT players deposits (whether validator is registered or deposited. Just not live on beacon chain)
     /// @dev This is called only in the BNFT player flow
     /// @param _validatorIds The IDs to be cancelled
-    function batchCancelDeposit(uint256[] calldata _validatorIds) external whenNotPaused {
+    function batchCancelDeposit(uint256[] calldata _validatorIds) external whenNotPaused firewallProtected {
         _batchCancelDeposit(_validatorIds, msg.sender);
     }
 
-    function batchCancelDepositByAdmin(uint256[] calldata _validatorIds, address _bnftStaker) external whenNotPaused onlyAdmin {
+    function batchCancelDepositByAdmin(uint256[] calldata _validatorIds, address _bnftStaker) external whenNotPaused onlyAdmin firewallProtected {
         _batchCancelDeposit(_validatorIds, _bnftStaker);
     }
 
@@ -430,7 +436,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice Removes a BNFT player from the bnftHolders array
     /// @param _bNftHolder Address of the BNFT player to remove
-    function deRegisterBnftHolder(address _bNftHolder) external {
+    function deRegisterBnftHolder(address _bNftHolder) external firewallProtected {
         require(bnftHoldersIndexes[_bNftHolder].registered, "Not registered");
         uint256 index = bnftHoldersIndexes[_bNftHolder].index;
         require(admins[msg.sender] || msg.sender == bnftHolders[index].holder, "Incorrect Caller");
@@ -450,7 +456,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
-    function sendExitRequests(uint256[] calldata _validatorIds) external onlyAdmin {
+    function sendExitRequests(uint256[] calldata _validatorIds) external onlyAdmin firewallProtected {
         nodesManager.batchSendExitRequest(_validatorIds);
     }
 
@@ -463,31 +469,31 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
-    function setRestakeBnftDeposits(bool _restake) external onlyAdmin {
+    function setRestakeBnftDeposits(bool _restake) external onlyAdmin firewallProtected {
         restakeBnftDeposits = _restake;
     }
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         admins[_address] = _isAdmin;
     }
 
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyAdmin firewallProtected {
         paused = true;
         emit Paused(_msgSender());
     }
 
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyAdmin firewallProtected {
         paused = false;
         emit Unpaused(_msgSender());
     }
 
     // Deprecated, just existing not to touch EtherFiAdmin contract
-    function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external onlyAdmin {
+    function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external onlyAdmin firewallProtected {
     }
 
-    function updateWhitelistedAddresses(address[] calldata _users, bool _value) external onlyAdmin {
+    function updateWhitelistedAddresses(address[] calldata _users, bool _value) external onlyAdmin firewallProtected {
         for (uint256 i = 0; i < _users.length; i++) {
             whitelisted[_users[i]] = _value;
 
@@ -495,24 +501,24 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         }
     }
 
-    function updateWhitelistStatus(bool _value) external onlyAdmin {
+    function updateWhitelistStatus(bool _value) external onlyAdmin firewallProtected {
         whitelistEnabled = _value;
 
         emit WhitelistStatusUpdated(_value);
     }
 
-    function updateBnftMode(bool _isLpBnftHolder) external onlyAdmin {
+    function updateBnftMode(bool _isLpBnftHolder) external onlyAdmin firewallProtected {
         // Never toggle it in the process of deposit-regiration
         isLpBnftHolder = _isLpBnftHolder;
     }
 
-    function addEthAmountLockedForWithdrawal(uint128 _amount) external {
+    function addEthAmountLockedForWithdrawal(uint128 _amount) external firewallProtected {
         if (!(msg.sender == address(etherFiAdminContract) || msg.sender == address(withdrawRequestNFT))) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal += _amount;
     }
 
-    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external {
+    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external firewallProtected {
         if (msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal -= _amount;
@@ -554,6 +560,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
+    
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -622,4 +636,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         _requireNotPaused();
         _;
     }
+
+
 }

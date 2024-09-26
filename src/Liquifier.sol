@@ -1,6 +1,7 @@
 /// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -8,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
@@ -47,7 +49,7 @@ interface IERC20Burnable is IERC20 {
 }
 
 /// Go wild, spread eETH/weETH to the world
-contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier {
+contract Liquifier is VennFirewallConsumer, Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier {
     using SafeERC20 for IERC20;
 
     uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
@@ -110,7 +112,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @notice initialize to set variables on deployment
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
                         address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool,
-                        uint32 _timeBoundCapRefreshInterval) initializer external {
+                        uint32 _timeBoundCapRefreshInterval) initializer external firewallProtected {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -130,9 +132,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
         DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
-    function initializeOnUpgrade(address _eigenLayerDelegationManager, address _pancakeRouter) external onlyOwner {
+    function initializeOnUpgrade(address _eigenLayerDelegationManager, address _pancakeRouter) external onlyOwner firewallProtected {
         // Disable the deposits on {cbETH, wBETH}
         updateDepositCap(address(cbEth), 0, 0);
         updateDepositCap(address(wbEth), 0, 0);
@@ -141,7 +146,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
     }
 
-    function initializeL1SyncPool(address _l1SyncPool) external onlyOwner {
+    function initializeL1SyncPool(address _l1SyncPool) external onlyOwner firewallProtected {
         if (l1SyncPool != address(0)) revert();
         l1SyncPool = _l1SyncPool;
     }
@@ -152,7 +157,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _queuedWithdrawal The QueuedWithdrawal to be used for the deposit. This is the proof that the user has the re-staked ETH and requested the withdrawals setting the Liquifier contract as the withdrawer.
     /// @param _referral The referral address
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
-    function depositWithQueuedWithdrawal(IDelegationManager.Withdrawal calldata _queuedWithdrawal, address _referral) external whenNotPaused nonReentrant returns (uint256) {
+    function depositWithQueuedWithdrawal(IDelegationManager.Withdrawal calldata _queuedWithdrawal, address _referral) external whenNotPaused nonReentrant firewallProtected returns (uint256) {
         bytes32 withdrawalRoot = verifyQueuedWithdrawal(msg.sender, _queuedWithdrawal);
 
         /// register it to prevent duplicate deposits with the same queued withdrawal
@@ -196,7 +201,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return eEthShare;
     }
 
-    function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
+    function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused firewallProtected returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return depositWithERC20(_token, _amount, _referral);
     }
@@ -206,7 +211,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
     /// @param _middlewareTimesIndexes One index to reference per QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single index.
     /// @dev middlewareTimesIndex should be calculated off chain before calling this function by finding the first index that satisfies `slasher.canWithdraw`
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata _queuedWithdrawals, IERC20[][] calldata _tokens, uint256[] calldata _middlewareTimesIndexes) external onlyAdmin {
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata _queuedWithdrawals, IERC20[][] calldata _tokens, uint256[] calldata _middlewareTimesIndexes) external onlyAdmin firewallProtected {
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -221,7 +226,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /// Initiate the process for redemption of stETH 
-    function stEthRequestWithdrawal() external onlyAdmin returns (uint256[] memory) {
+    function stEthRequestWithdrawal() external onlyAdmin firewallProtected returns (uint256[] memory) {
         uint256 amount = lido.balanceOf(address(this));
         return stEthRequestWithdrawal(amount);
     }
@@ -248,7 +253,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
     /// @param _requestIds array of request ids to claim
     /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyAdmin {
+    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyAdmin firewallProtected {
         uint256 balance = address(this).balance;
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
         uint256 newBalance = address(this).balance;
@@ -261,13 +266,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
-    function withdrawEther() external onlyAdmin {
+    function withdrawEther() external onlyAdmin firewallProtected {
         uint256 amountToLiquidityPool = address(this).balance;
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         if (!sent) revert EthTransferFailed();
     }
 
-    function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
+    function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner firewallProtected {
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
@@ -276,7 +281,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
     
-    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
+    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner firewallProtected {
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();
@@ -288,35 +293,35 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0, _isL2Eth);
     }
 
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOwner {
+    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOwner firewallProtected {
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
-    function pauseDeposits(address _token) external onlyPauser {
+    function pauseDeposits(address _token) external onlyPauser firewallProtected {
         tokenInfos[_token].timeBoundCapInEther = 0;
         tokenInfos[_token].totalCapInEther = 0;
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         admins[_address] = _isAdmin;
     }
 
-    function updatePauser(address _address, bool _isPauser) external onlyAdmin {
+    function updatePauser(address _address, bool _isPauser) external onlyAdmin firewallProtected {
         pausers[_address] = _isPauser;
     }
 
     //Pauses the contract
-    function pauseContract() external onlyPauser {
+    function pauseContract() external onlyPauser firewallProtected {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyOwner {
+    function unPauseContract() external onlyOwner firewallProtected {
         _unpause();
     }
 
     // ETH comes in, L2ETH is burnt
-    function unwrapL2Eth(address _l2Eth) external payable nonReentrant returns (uint256) {
+    function unwrapL2Eth(address _l2Eth) external payable nonReentrant firewallProtected returns (uint256) {
         if (msg.sender != l1SyncPool) revert IncorrectCaller();
         if (!isTokenWhitelisted(_l2Eth) || !tokenInfos[_l2Eth].isL2Eth) revert NotSupportedToken();
         _L2SanityChecks(_l2Eth);
@@ -326,7 +331,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     // uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime
-    function pancakeSwapForEth(address _token, uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime) external onlyAdmin {
+    function pancakeSwapForEth(address _token, uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime) external onlyAdmin firewallProtected {
         if (_amount > IERC20(_token).balanceOf(address(this))) revert NotEnoughBalance();
         uint256 beforeBalance = address(this).balance;
         
@@ -350,19 +355,19 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (currentBalance < _minOutputAmount + beforeBalance) revert WrongOutput();
     }
 
-    function swapCbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+    function swapCbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin firewallProtected returns (uint256) {
         if (_amount > cbEth.balanceOf(address(this))) revert NotEnoughBalance();
         cbEth.approve(address(cbEth_Eth_Pool), _amount);
         return cbEth_Eth_Pool.exchange_underlying(1, 0, _amount, _minOutputAmount);
     }
 
-    function swapWbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+    function swapWbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin firewallProtected returns (uint256) {
         if (_amount > wbEth.balanceOf(address(this))) revert NotEnoughBalance();
         wbEth.approve(address(wbEth_Eth_Pool), _amount);
         return wbEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
     }
 
-    function swapStEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+    function swapStEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin firewallProtected returns (uint256) {
         if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
         lido.approve(address(stEth_Eth_Pool), _amount);
         return stEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
@@ -563,6 +568,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function _requirePauser() internal view virtual {
         if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
+    }
+
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
     }
 
     /* MODIFIER */

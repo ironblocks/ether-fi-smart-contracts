@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 
-contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
+contract EarlyAdopterPool is VennFirewallConsumer, Ownable, ReentrancyGuard, Pausable {
     using Math for uint256;
 
     struct UserDepositInfo {
@@ -112,6 +113,7 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
         OnlyCorrectAmount(_amount)
         DepositingOpen
         whenNotPaused
+        firewallProtected
     {
         require(
             (_erc20Contract == rETH ||
@@ -144,6 +146,7 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
         OnlyCorrectAmount(msg.value)
         DepositingOpen
         whenNotPaused
+        firewallProtected
     {
         depositInfo[msg.sender].depositTime = block.timestamp;
         depositInfo[msg.sender].etherBalance += msg.value;
@@ -225,12 +228,12 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     }
 
     //Pauses the contract
-    function pauseContract() external onlyOwner {
+    function pauseContract() external onlyOwner firewallProtected {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyOwner {
+    function unPauseContract() external onlyOwner firewallProtected {
         _unpause();
     }
 

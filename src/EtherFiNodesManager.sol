@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -19,6 +20,7 @@ import "forge-std/console.sol";
 
 
 contract EtherFiNodesManager is
+    VennFirewallConsumer,
     Initializable,
     IEtherFiNodesManager,
     OwnableUpgradeable,
@@ -122,7 +124,7 @@ contract EtherFiNodesManager is
         address _eigenPodManager, 
         address _delayedWithdrawalRouter,
         address _delegationManager
-    ) external initializer {
+    ) external initializer firewallProtected {
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
@@ -141,12 +143,15 @@ contract EtherFiNodesManager is
         eigenPodManager = IEigenPodManager(_eigenPodManager);
         delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
         delegationManager = IDelegationManager(_delegationManager);
-    }
+    
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
+		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
+	}
 
     /// @notice Send the request to exit the validators as their T-NFT holder
     ///         The B-NFT holder must serve the request otherwise their bond will get penalized gradually
     /// @param _validatorIds IDs of the validators
-    function batchSendExitRequest(uint256[] calldata _validatorIds) external whenNotPaused {
+    function batchSendExitRequest(uint256[] calldata _validatorIds) external whenNotPaused firewallProtected {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             uint256 _validatorId = _validatorIds[i];
             address etherfiNode = etherfiNodeAddress[_validatorId];
@@ -168,7 +173,7 @@ contract EtherFiNodesManager is
     /// @dev Eigenlayer's PEPE proof system operates on pod-level and will require checkpoint proofs for
     ///      every single validator associated with the pod. For efficiency you will want to try to only
     ///      do checkpoints whene you wish to update most of the validators in the associated pod at once
-    function startCheckpoint(uint256 _validatorId, bool _revertIfNoBalance) external onlyAdmin {
+    function startCheckpoint(uint256 _validatorId, bool _revertIfNoBalance) external onlyAdmin firewallProtected {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         IEtherFiNode(etherfiNode).startCheckpoint(_revertIfNoBalance);
     }
@@ -176,7 +181,7 @@ contract EtherFiNodesManager is
     // @notice you can delegate 1 additional wallet that is allowed to call startCheckpoint() and
     //         verifyWithdrawalCredentials() on behalf of this pod
     /// @dev this will affect all validators in the pod, not just the provided validator
-    function setProofSubmitter(uint256 _validatorId, address _newProofSubmitter) external onlyAdmin {
+    function setProofSubmitter(uint256 _validatorId, address _newProofSubmitter) external onlyAdmin firewallProtected {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         IEtherFiNode(etherfiNode).setProofSubmitter(_newProofSubmitter);
     }
@@ -187,7 +192,7 @@ contract EtherFiNodesManager is
     function processNodeExit(
         uint256[] calldata _validatorIds,
         uint32[] calldata _exitTimestamps
-    ) external onlyAdmin nonReentrant whenNotPaused {
+    ) external onlyAdmin nonReentrant whenNotPaused firewallProtected {
         if (_validatorIds.length != _exitTimestamps.length) revert InvalidParams();
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             uint256 _validatorId = _validatorIds[i];
@@ -217,7 +222,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external onlyOperatingAdmin {
+    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external onlyOperatingAdmin firewallProtected {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
             IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i], _receiveAsTokens);
@@ -249,7 +254,7 @@ contract EtherFiNodesManager is
         emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
-    function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused{
+    function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused firewallProtected{
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             partialWithdraw( _validatorIds[i]);
         }
@@ -286,7 +291,7 @@ contract EtherFiNodesManager is
 
     /// @notice Process the full withdrawal for multiple validators
     /// @param _validatorIds The validator Ids
-    function batchFullWithdraw(uint256[] calldata _validatorIds) external whenNotPaused {
+    function batchFullWithdraw(uint256[] calldata _validatorIds) external whenNotPaused firewallProtected {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             fullWithdraw(_validatorIds[i]);
         }
@@ -297,7 +302,7 @@ contract EtherFiNodesManager is
     /// @param _validatorIds The validator Ids
     function markBeingSlashed(
         uint256[] calldata _validatorIds
-    ) external whenNotPaused onlyAdmin {
+    ) external whenNotPaused onlyAdmin firewallProtected {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _updateEtherFiNode(_validatorIds[i]);
             _setValidatorPhase(etherfiNodeAddress[_validatorIds[i]], _validatorIds[i], IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
@@ -308,7 +313,7 @@ contract EtherFiNodesManager is
     error NotInstalled();
     error InvalidEtherFiNodeVersion();
 
-    function allocateEtherFiNode(bool _enableRestaking) external onlyStakingManagerContract returns (address withdrawalSafeAddress) {
+    function allocateEtherFiNode(bool _enableRestaking) external onlyStakingManagerContract firewallProtected returns (address withdrawalSafeAddress) {
         // can I re-use an existing safe
         if (unusedWithdrawalSafes.length > 0) {
             // pop
@@ -324,7 +329,7 @@ contract EtherFiNodesManager is
         IEtherFiNode(withdrawalSafeAddress).migrateVersion(0, info);
     }
 
-    function updateEtherFiNode(uint256 _validatorId) external {
+    function updateEtherFiNode(uint256 _validatorId) external firewallProtected {
         _updateEtherFiNode(_validatorId);
     }
 
@@ -346,7 +351,7 @@ contract EtherFiNodesManager is
     /// @param _validatorId ID of the validator associated to the node
     /// @param _enableRestaking whether or not to enable restaking
     /// @param _withdrawalSafeAddress address of the withdrawal safe
-    function registerValidator(uint256 _validatorId, bool _enableRestaking, address _withdrawalSafeAddress) external onlyStakingManagerContract {
+    function registerValidator(uint256 _validatorId, bool _enableRestaking, address _withdrawalSafeAddress) external onlyStakingManagerContract firewallProtected {
         if (etherfiNodeAddress[_validatorId] != address(0)) revert AlreadyInstalled();
         if (IEtherFiNode(_withdrawalSafeAddress).version() != 1) revert InvalidEtherFiNodeVersion();
 
@@ -358,7 +363,7 @@ contract EtherFiNodesManager is
 
     /// @notice Unset the EtherFiNode contract for the validator ID
     /// @param _validatorId ID of the validator associated
-    function unregisterValidator(uint256 _validatorId) external onlyStakingManagerContract {
+    function unregisterValidator(uint256 _validatorId) external onlyStakingManagerContract firewallProtected {
         // Called by StakingManager.CancelDeposit
         // {STAKE_DEPOSITED, WAITING_FOR_APPROVAL} -> {NOT_INITIALIZED}
         _updateEtherFiNode(_validatorId);
@@ -374,7 +379,7 @@ contract EtherFiNodesManager is
     /// @param _selector method selector
     /// @param _target call target for forwarded call
     /// @param _allowed enable or disable the call
-    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyAdmin {
+    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyAdmin firewallProtected {
         allowedForwardedExternalCalls[_selector][_target] = _allowed;
         emit AllowedForwardedExternalCallsUpdated(_selector, _target, _allowed);
     }
@@ -382,12 +387,12 @@ contract EtherFiNodesManager is
     /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
     /// @param _selector method selector
     /// @param _allowed enable or disable the call
-    function updateAllowedForwardedEigenpodCalls(bytes4 _selector, bool _allowed) external onlyAdmin {
+    function updateAllowedForwardedEigenpodCalls(bytes4 _selector, bool _allowed) external onlyAdmin firewallProtected {
         allowedForwardedEigenpodCalls[_selector] = _allowed;
         emit AllowedForwardedEigenpodCallsUpdated(_selector, _allowed);
     }
 
-    function forwardEigenpodCall(uint256[] calldata _validatorIds, bytes[] calldata _data) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
+    function forwardEigenpodCall(uint256[] calldata _validatorIds, bytes[] calldata _data) external nonReentrant whenNotPaused onlyOperatingAdmin firewallProtected returns (bytes[] memory returnData) {
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _verifyForwardedEigenpodCall(_data[i]);
@@ -395,7 +400,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function forwardEigenpodCall(address[] calldata _etherfiNodes, bytes[] calldata _data) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
+    function forwardEigenpodCall(address[] calldata _etherfiNodes, bytes[] calldata _data) external nonReentrant whenNotPaused onlyOperatingAdmin firewallProtected returns (bytes[] memory returnData) {
         returnData = new bytes[](_etherfiNodes.length);
         for (uint256 i = 0; i < _etherfiNodes.length; i++) {
             _verifyForwardedEigenpodCall(_data[i]);
@@ -403,7 +408,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function forwardExternalCall(uint256[] calldata _validatorIds, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
+    function forwardExternalCall(uint256[] calldata _validatorIds, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused onlyOperatingAdmin firewallProtected returns (bytes[] memory returnData) {
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _verifyForwardedExternalCall(_target, _data[i]);
@@ -411,7 +416,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function forwardExternalCall(address[] calldata _etherfiNodes, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
+    function forwardExternalCall(address[] calldata _etherfiNodes, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused onlyOperatingAdmin firewallProtected returns (bytes[] memory returnData) {
         returnData = new bytes[](_etherfiNodes.length);
         for (uint256 i = 0; i < _etherfiNodes.length; i++) {
             _verifyForwardedExternalCall(_target, _data[i]);
@@ -420,7 +425,7 @@ contract EtherFiNodesManager is
     }
 
     function _verifyForwardedEigenpodCall(bytes calldata _data) internal view {
-        if (_data.length < 4) revert InvalidForwardedCall();
+        if (_data.length < 4) revert IFC();
         bytes4 selector = bytes4(_data[:4]);
         if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
     }
@@ -472,33 +477,33 @@ contract EtherFiNodesManager is
 
     /// @notice set maximum number of queued eigenlayer withdrawals that can be processed in 1 tx
     /// @param _max max number of queued withdrawals
-    function setMaxEigenLayerWithdrawals(uint8 _max) external onlyAdmin {
+    function setMaxEigenLayerWithdrawals(uint8 _max) external onlyAdmin firewallProtected {
         maxEigenlayerWithdrawals = _max;
     }
 
     /// @notice Increments the number of validators by a certain amount
     /// @param _count how many new validators to increment by
     function incrementNumberOfValidators(uint64 _count) external onlyStakingManagerContract {
-        numberOfValidators += _count;
+        numValidators += _count;
     }
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         admins[_address] = _isAdmin;
     }
 
-    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
         operatingAdmin[_address] = _isAdmin;
     }
 
     // Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyAdmin firewallProtected {
         _pause();
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyAdmin firewallProtected {
         _unpause();
     }
 
@@ -594,7 +599,14 @@ contract EtherFiNodesManager is
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
+    function _msgData() internal view virtual override(Context, ContextUpgradeable) returns (bytes calldata) {
+        return super._msgData();
+    }
 
+    function _msgSender() internal view virtual override(Context, ContextUpgradeable) returns (address) {
+        return super._msgSender();
+    }
+    
     //--------------------------------------------------------------------------------------
     //-------------------------------------  GETTER   --------------------------------------
     //--------------------------------------------------------------------------------------
