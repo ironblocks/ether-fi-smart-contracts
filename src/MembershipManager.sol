@@ -41,29 +41,21 @@ contract MembershipManager is
     TierData[] public tierData;
 
     // [BEGIN] SLOT 261
-
+    uint56 public minDepositGwei;
+    uint32 public topUpCooltimePeriod;
+    uint32 public withdrawalLockBlocks;
     uint16 public pointsBoostFactor; // + (X / 10000) more points, if staking rewards are sacrificed
     uint16 public pointsGrowthRate; // + (X / 10000) kwei points are earned per ETH per day
-    uint56 public minDepositGwei;
-    uint8 public maxDepositTopUpPercent;
-
     uint16 private mintFee; // fee = 0.001 ETH * 'mintFee'
     uint16 private burnFee; // fee = 0.001 ETH * 'burnFee'
     uint16 private upgradeFee; // fee = 0.001 ETH * 'upgradeFee'
-    uint8 public DEPRECATED_treasuryFeeSplitPercent;
-    uint8 public DEPRECATED_protocolRevenueFeeSplitPercent;
-
-    uint32 public topUpCooltimePeriod;
-    uint32 public withdrawalLockBlocks;
-
     uint16 private fanBoostThreshold; // = 0.001 ETH * fanBoostThreshold
     uint16 private burnFeeWaiverPeriodInDays;
+    uint8 public maxDepositTopUpPercent;
 
     // [END] SLOT 261 END
 
-    uint128 public DEPRECATED_sharesReservedForRewards;
 
-    address public DEPRECATED_admin;
     mapping(address => bool) public admins;
 
     // Phase 2
@@ -113,7 +105,7 @@ contract MembershipManager is
     //--------------------------------------------------------------------------------------
 
     error Deprecated();
-    error DisallowZeroAddress();
+   
     error WrongVersion();
 
     // To be called for Phase 2 contract upgrade
@@ -219,7 +211,6 @@ contract MembershipManager is
     }
 
     error InvalidDeposit();
-    error InvalidAllocation();
     error InvalidAmount();
     error InsufficientBalance();
 
@@ -302,8 +293,6 @@ contract MembershipManager is
     }
 
     error ExceededMaxWithdrawal();
-    error InsufficientLiquidity();
-    error RequireTokenUnlocked();
 
     /// @notice Requests exchange of membership points tokens for ETH.
     /// @dev decrements the amount of eETH backing the membership NFT and calls requestWithdraw on the liquidity pool
@@ -827,8 +816,6 @@ contract MembershipManager is
         token.prevPointsAccrualTimestamp = uint32(block.timestamp);
     }
 
-    error NotEnoughReservedRewards();
-
     /// @notice Claims the staking rewards for a specific membership NFT.
     /// @dev This function allows users to claim the staking rewards earned by a specific membership NFT.
     /// @param _tokenId The ID of the membership NFT.
@@ -844,7 +831,7 @@ contract MembershipManager is
         token.vaultShare = tierData[tier].rewardsGlobalIndex;
     }
 
-    error NotInV0();
+   
     function migrateFromV0ToV1(uint256 _tokenId) public {
         claim(_tokenId);
         _migrateFromV0ToV1(_tokenId);
@@ -951,14 +938,18 @@ contract MembershipManager is
         ) revert InvalidAmount();
     }
 
-    error IntegerOverflow();
-
-    function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
-        return (_a > _b) ? _b : _a;
+    function _min(uint256 a, uint256 b) internal pure returns (uint256) {
+    assembly {
+        mstore(0x00, xor(a, mul(xor(a, b), lt(b, a))))
+        return(0x00, 0x20)
+        }
     }
 
-    function _max(uint256 _a, uint256 _b) internal pure returns (uint256) {
-        return (_a > _b) ? _a : _b;
+    function _max(uint256 a, uint256 b) internal pure returns (uint256) {
+    assembly {
+        mstore(0x00, xor(a, mul(xor(a, b), gt(b, a))))
+        return(0x00, 0x20)
+    }
     }
 
     /// @notice Applies the unwrap penalty.
