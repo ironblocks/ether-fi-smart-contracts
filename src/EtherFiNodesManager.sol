@@ -385,7 +385,7 @@ contract EtherFiNodesManager is
     /// @param _selector method selector
     /// @param _target call target for forwarded call
     /// @param _allowed enable or disable the call
-    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyAdmin firewallProtected {
+    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyAdmin {
         allowedForwardedExternalCalls[_selector][_target] = _allowed;
         emit AllowedForwardedExternalCallsUpdated(_selector, _target, _allowed);
     }
@@ -393,7 +393,7 @@ contract EtherFiNodesManager is
     /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
     /// @param _selector method selector
     /// @param _allowed enable or disable the call
-    function updateAllowedForwardedEigenpodCalls(bytes4 _selector, bool _allowed) external onlyAdmin firewallProtected {
+    function updateAllowedForwardedEigenpodCalls(bytes4 _selector, bool _allowed) external onlyAdmin {
         allowedForwardedEigenpodCalls[_selector] = _allowed;
         emit AllowedForwardedEigenpodCallsUpdated(_selector, _allowed);
     }
