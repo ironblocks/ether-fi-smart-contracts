@@ -73,19 +73,19 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event Withdrawn(uint256 indexed _validatorId, uint256 amount);
-    event ExitReq(uint256 _validatorId);
-    event ExitRev(uint256 _validatorId);
-    event ExitProc(uint256 _validatorId);
-    event Evicted(uint256 _validatorId);
-    event PhaseChg(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
+    event FundsWithdrawn(uint256 indexed _validatorId, uint256 amount);
+    event NodeExitRequested(uint256 _validatorId);
+    event NodeExitRequestReverted(uint256 _validatorId);
+    event NodeExitProcessed(uint256 _validatorId);
+    event NodeEvicted(uint256 _validatorId);
+    event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
 
-    event PartialWd(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
-    event FullWd(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
-    event QueuedRs(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
+    event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
-    event ExtCallsUpd(bytes4 indexed selector, address indexed _target, bool _allowed);
-    event EigenCallsUpd(bytes4 indexed selector, bool _allowed);
+    event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
+    event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -98,10 +98,10 @@ contract EtherFiNodesManager is
 
     receive() external payable {}
 
-    error IP();
-    error NZA();
-    error FCNA();
-    error IFC();
+    error InvalidParams();
+    error NonZeroAddress();
+    error ForwardedCallNotAllowed();
+    error InvalidForwardedCall();
 
     /// @dev Sets the revenue splits on deployment
     /// @dev AuctionManager, treasury and deposit contracts must be deployed first
@@ -119,7 +119,7 @@ contract EtherFiNodesManager is
         address _eigenPodManager, 
         address _delayedWithdrawalRouter,
         address _delegationManager
-    ) external initializer firewallProtected {
+    ) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
@@ -155,12 +155,12 @@ contract EtherFiNodesManager is
             // require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
             // require (!isExitRequested(_validatorId), "ASKED");
             
-if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiNode.VALIDATOR_PHASE.LIVE || isExitRequested(_validatorId)) revert InvalidRequest();
+    if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiNode.VALIDATOR_PHASE.LIVE || isExitRequested(_validatorId)) revert InvalidRequest();
 
             _updateEtherFiNode(_validatorId);
             _updateExitRequestTimestamp(_validatorId, etherfiNode, uint32(block.timestamp));
 
-            emit ExitReq(_validatorId);
+            emit NodeExitRequested(_validatorId);
         }
     }
 
@@ -189,7 +189,7 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
         uint256[] calldata _validatorIds,
         uint32[] calldata _exitTimestamps
     ) external onlyAdmin nonReentrant whenNotPaused firewallProtected {
-        if (_validatorIds.length != _exitTimestamps.length) revert IP();
+        if (_validatorIds.length != _exitTimestamps.length) revert InvalidParams();
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             uint256 _validatorId = _validatorIds[i];
             address etherfiNode = etherfiNodeAddress[_validatorId];
@@ -203,8 +203,8 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
 
             numberOfValidators -= 1;
 
-            emit ExitProc(_validatorId);
-            emit QueuedRs(_validatorId, etherfiNode, withdrawalRoots);
+            emit NodeExitProcessed(_validatorId);
+            emit QueuedRestakingWithdrawal(_validatorId, etherfiNode, withdrawalRoots);
         }
     }
 
@@ -247,7 +247,7 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
         _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
 
-        emit PartialWd(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
+        emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
     function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused firewallProtected{
@@ -284,7 +284,7 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
         tnft.burnFromWithdrawal(_validatorId);
         bnft.burnFromWithdrawal(_validatorId);
 
-        emit FullWd(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
+        emit FullWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
     /// @notice Process the full withdrawal for multiple validators
@@ -379,7 +379,7 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
     /// @param _allowed enable or disable the call
     function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyAdmin firewallProtected {
         allowedForwardedExternalCalls[_selector][_target] = _allowed;
-        emit ExtCallsUpd(_selector, _target, _allowed);
+        emit AllowedForwardedExternalCallsUpdated(_selector, _target, _allowed);
     }
 
     /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
@@ -387,7 +387,7 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
     /// @param _allowed enable or disable the call
     function updateAllowedForwardedEigenpodCalls(bytes4 _selector, bool _allowed) external onlyAdmin firewallProtected {
         allowedForwardedEigenpodCalls[_selector] = _allowed;
-        emit EigenCallsUpd(_selector, _allowed);
+        emit AllowedForwardedEigenpodCallsUpdated(_selector, _allowed);
     }
 
     function forwardEigenpodCall(uint256[] calldata _validatorIds, bytes[] calldata _data) external nonReentrant whenNotPaused onlyOperatingAdmin firewallProtected returns (bytes[] memory returnData) {
@@ -423,15 +423,15 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
     }
 
     function _verifyForwardedEigenpodCall(bytes calldata _data) internal view {
-        if (_data.length < 4) revert IFC();
+        if (_data.length < 4) revert InvalidForwardedCall();
         bytes4 selector = bytes4(_data[:4]);
-        if (!allowedForwardedEigenpodCalls[selector]) revert FCNA();
+        if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
     }
 
     function _verifyForwardedExternalCall(address _to, bytes calldata _data) internal view {
-        if (_data.length < 4) revert IFC();
+        if (_data.length < 4) revert InvalidForwardedCall();
         bytes4 selector = bytes4(_data[:4]);
-        if (!allowedForwardedExternalCalls[selector][_to]) revert FCNA();
+        if (!allowedForwardedExternalCalls[selector][_to]) revert ForwardedCallNotAllowed();
     }
 
     //--------------------------------------------------------------------------------------
@@ -447,7 +447,7 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
     function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnft)
         public onlyAdmin
     {
-        if (_treasury + _nodeOperator + _tnft + _bnft != SCALE) revert IP();
+        if (_treasury + _nodeOperator + _tnft + _bnft != SCALE) revert InvalidParams();
         stakingRewardsSplit.treasury = _treasury;
         stakingRewardsSplit.nodeOperator = _nodeOperator;
         stakingRewardsSplit.tnft = _tnft;
@@ -528,7 +528,7 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
             IEtherFiNode(_node).updateNumExitedValidators(1, 0);
         }
 
-        emit PhaseChg(_validatorId, _newPhase);
+        emit PhaseChanged(_validatorId, _newPhase);
     }
 
     function _unRegisterValidator(uint256 _validatorId) internal {
