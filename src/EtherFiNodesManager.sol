@@ -482,7 +482,7 @@ if (msg.sender != tnft.ownerOf(_validatorId) || phase(_validatorId) != IEtherFiN
     /// @notice Increments the number of validators by a certain amount
     /// @param _count how many new validators to increment by
     function incrementNumberOfValidators(uint64 _count) external onlyStakingManagerContract {
-        numValidators += _count;
+        numberOfValidators += _count;
     }
 
     /// @notice Updates the address of the admin

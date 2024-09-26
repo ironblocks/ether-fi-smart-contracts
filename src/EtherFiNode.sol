@@ -328,8 +328,8 @@ contract EtherFiNode is VennFirewallConsumer, IEtherFiNode, IERC1271 {
     ) public view returns (uint256) {
         if (_tNftExitRequestTimestamp == 0) return 0;
 
-        uint128 _penaltyPrinciple = IEtherFiNodesManager(etherFiNodesManager).nonExitPenaltyPrinc();
-        uint64 _dailyPenalty = IEtherFiNodesManager(etherFiNodesManager).nonExitPenaltyRate();
+        uint128 _penaltyPrinciple = IEtherFiNodesManager(etherFiNodesManager).nonExitPenaltyPrincipal();
+        uint64 _dailyPenalty = IEtherFiNodesManager(etherFiNodesManager).nonExitPenaltyDailyRate();
         uint256 daysElapsed = _getDaysPassedSince(_tNftExitRequestTimestamp, _bNftExitRequestTimestamp);
         if (daysElapsed > 365) {
             return _penaltyPrinciple;
