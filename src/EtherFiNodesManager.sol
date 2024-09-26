@@ -487,21 +487,21 @@ contract EtherFiNodesManager is
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
         admins[_address] = _isAdmin;
     }
 
-    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner firewallProtected {
+    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner {
         operatingAdmin[_address] = _isAdmin;
     }
 
     // Pauses the contract
-    function pauseContract() external onlyAdmin firewallProtected {
+    function pauseContract() external onlyAdmin {
         _pause();
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyAdmin firewallProtected {
+    function unPauseContract() external onlyAdmin {
         _unpause();
     }
 
