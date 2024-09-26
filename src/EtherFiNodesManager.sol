@@ -139,7 +139,6 @@ contract EtherFiNodesManager is
         delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
         delegationManager = IDelegationManager(_delegationManager);
     
-		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall")) - 1), address(0));
 		_setAddressBySlot(bytes32(uint256(keccak256("eip1967.firewall.admin")) - 1), msg.sender);
 	}
     error InvalidRequest();
@@ -238,7 +237,17 @@ contract EtherFiNodesManager is
     //  3. perform `EigenPod.verifyCheckpointProofs()`
     //  4. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
     //  5. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
-    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyAdmin {
+    function partialWithdraw(uint256 _validatorId) external nonReentrant whenNotPaused onlyAdmin firewallProtected {
+        _partialWithdraw(_validatorId);
+    }
+
+    function batchPartialWithdraw(uint256[] calldata _validatorIds) external nonReentrant whenNotPaused onlyAdmin firewallProtected{
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            _partialWithdraw( _validatorIds[i]);
+        }
+    }
+
+    function _partialWithdraw(uint256 _validatorId) internal {
 
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
@@ -248,12 +257,6 @@ contract EtherFiNodesManager is
         _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
 
         emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
-    }
-
-    function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused firewallProtected{
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            partialWithdraw( _validatorIds[i]);
-        }
     }
 
     /// @notice process the full withdrawal
@@ -271,7 +274,20 @@ contract EtherFiNodesManager is
     //  7. Finally, perform `EtherFiNodesManager.fullWithdraw`
 
     error NotExited(uint256 _validatorId);
-    function fullWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused{
+    function fullWithdraw(uint256 _validatorId) external nonReentrant whenNotPaused firewallProtected {
+        _fullWithdraw(_validatorId);
+    }
+
+    /// @notice Process the full withdrawal for multiple validators
+    /// @param _validatorIds The validator Ids
+    function batchFullWithdraw(uint256[] calldata _validatorIds) external nonReentrant whenNotPaused firewallProtected {
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            _fullWithdraw(_validatorIds[i]);
+        }
+    }
+
+
+    function _fullWithdraw(uint256 _validatorId) internal {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
         if (phase(_validatorId) != IEtherFiNode.VALIDATOR_PHASE.EXITED) revert NotExited(_validatorId);
@@ -285,14 +301,6 @@ contract EtherFiNodesManager is
         bnft.burnFromWithdrawal(_validatorId);
 
         emit FullWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
-    }
-
-    /// @notice Process the full withdrawal for multiple validators
-    /// @param _validatorIds The validator Ids
-    function batchFullWithdraw(uint256[] calldata _validatorIds) external whenNotPaused firewallProtected {
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            fullWithdraw(_validatorIds[i]);
-        }
     }
 
     /// @notice Once the Oracle observes that the validator is being slashed, it marks the validator as being slashed
