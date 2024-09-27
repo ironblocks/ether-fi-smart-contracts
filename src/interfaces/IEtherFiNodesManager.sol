@@ -60,18 +60,18 @@ interface IEtherFiNodesManager {
     function batchPartialWithdraw(uint256[] calldata _validatorIds) external;
     function fullWithdraw(uint256 _validatorId) external;
     function getUnusedWithdrawalSafesLength() external view returns (uint256);
-    function incrementNumberOfValidators(uint64 _count) external;
+    function incrementNumberOfValidators(uint64 _count) external payable;
     function markBeingSlashed(uint256[] calldata _validatorIds) external;
     function partialWithdraw(uint256 _validatorId) external;
     function processNodeExit(uint256[] calldata _validatorIds, uint32[] calldata _exitTimestamp) external;
     function allocateEtherFiNode(bool _enableRestaking) external returns (address);
-    function registerValidator(uint256 _validatorId, bool _enableRestaking, address _withdrawalSafeAddress) external;
-    function setValidatorPhase(uint256 _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase) external;
-    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) external;
-    function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnf) external;
-    function unregisterValidator(uint256 _validatorId) external;
+    function registerValidator(uint256 _validatorId, bool _enableRestaking, address _withdrawalSafeAddress) external payable;
+    function setValidatorPhase(uint256 _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase) external payable;
+    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) external payable;
+    function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnf) external payable;
+    function unregisterValidator(uint256 _validatorId) external payable;
     
-    function updateAdmin(address _address, bool _isAdmin) external;
-    function pauseContract() external;
-    function unPauseContract() external;
+    function updateAdmin(address _address, bool _isAdmin) external payable;
+    function pauseContract() external payable;
+    function unPauseContract() external payable;
 }

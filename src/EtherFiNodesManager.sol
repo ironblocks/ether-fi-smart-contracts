@@ -357,7 +357,7 @@ contract EtherFiNodesManager is
     /// @param _validatorId ID of the validator associated to the node
     /// @param _enableRestaking whether or not to enable restaking
     /// @param _withdrawalSafeAddress address of the withdrawal safe
-    function registerValidator(uint256 _validatorId, bool _enableRestaking, address _withdrawalSafeAddress) external onlyStakingManagerContract firewallProtected {
+    function registerValidator(uint256 _validatorId, bool _enableRestaking, address _withdrawalSafeAddress) external onlyStakingManagerContract firewallProtected payable {
         if (etherfiNodeAddress[_validatorId] != address(0)) revert AlreadyInstalled();
         if (IEtherFiNode(_withdrawalSafeAddress).version() != 1) revert InvalidEtherFiNodeVersion();
 
@@ -369,7 +369,7 @@ contract EtherFiNodesManager is
 
     /// @notice Unset the EtherFiNode contract for the validator ID
     /// @param _validatorId ID of the validator associated
-    function unregisterValidator(uint256 _validatorId) external onlyStakingManagerContract firewallProtected {
+    function unregisterValidator(uint256 _validatorId) external onlyStakingManagerContract firewallProtected payable {
         // Called by StakingManager.CancelDeposit
         // {STAKE_DEPOSITED, WAITING_FOR_APPROVAL} -> {NOT_INITIALIZED}
         _updateEtherFiNode(_validatorId);
@@ -453,7 +453,7 @@ contract EtherFiNodesManager is
     /// @param _tnft the split going to the tnft holder
     /// @param _bnft the split going to the bnft holder
     function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnft)
-        public onlyAdmin
+        public onlyAdmin payable
     {
         if (_treasury + _nodeOperator + _tnft + _bnft != SCALE) revert InvalidParams();
         stakingRewardsSplit.treasury = _treasury;
@@ -466,7 +466,7 @@ contract EtherFiNodesManager is
     /// @notice Sets the Non Exit Penalty 
     /// @param _nonExitPenaltyPrincipal the new principal amount
     /// @param _nonExitPenaltyDailyRate the new non exit daily rate
-    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) public onlyAdmin {
+    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) public onlyAdmin payable {
         if(_nonExitPenaltyDailyRate > 10000) revert InvalidPenaltyRate();
         nonExitPenaltyPrincipal = _nonExitPenaltyPrincipal;
         nonExitPenaltyDailyRate = _nonExitPenaltyDailyRate;
@@ -476,40 +476,40 @@ contract EtherFiNodesManager is
     /// @notice Sets the phase of the validator
     /// @param _validatorId id of the validator associated to this etherfi node
     /// @param _phase phase of the validator
-    function setValidatorPhase(uint256 _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase) public onlyStakingManagerContract {
+    function setValidatorPhase(uint256 _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase) public onlyStakingManagerContract payable {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _setValidatorPhase(etherfiNode, _validatorId, _phase);
     }
 
     /// @notice set maximum number of queued eigenlayer withdrawals that can be processed in 1 tx
     /// @param _max max number of queued withdrawals
-    function setMaxEigenLayerWithdrawals(uint8 _max) external onlyAdmin firewallProtected {
+    function setMaxEigenLayerWithdrawals(uint8 _max) external onlyAdmin firewallProtected payable {
         maxEigenlayerWithdrawals = _max;
     }
 
     /// @notice Increments the number of validators by a certain amount
     /// @param _count how many new validators to increment by
-    function incrementNumberOfValidators(uint64 _count) external onlyStakingManagerContract {
+    function incrementNumberOfValidators(uint64 _count) external onlyStakingManagerContract payable {
         numberOfValidators += _count;
     }
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner payable {
         admins[_address] = _isAdmin;
     }
 
-    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner {
+    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner payable {
         operatingAdmin[_address] = _isAdmin;
     }
 
     // Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyAdmin payable {
         _pause();
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyAdmin payable {
         _unpause();
     }
 
