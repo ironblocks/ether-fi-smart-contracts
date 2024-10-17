@@ -1,25 +1,66 @@
-# etherfi-protocol x venn integration
+# EtherFi x Venn
 
-This repo contains the etherfi-protocol smart contracts modified with the addition of the venn firewall.
+This repo demostrates how EtherFi smart contracts can use Venn to enable onchain protection on `Holesky`.
 
-Contracts that have been modified will have functions with a `firewallProtected` modifier.
+The following contracts have been modified to import the `VennFirewallConsumer`, adding the  `firewallProtected` modifier to various contract methods:
 
-To make the integration work, some changes have been made to the original contracts, mostly simple bytecode optimisations.
+- `src/AuctionManager.sol`
+- `src/BNFT.sol`
+- `src/BucketRateLimiter.sol`
+- `src/DepositAdapter.sol`
+- `src/EarlyAdopterPool.sol`
+- `src/EETH.sol`
+- `src/EtherFiAdmin.sol`
+- `src/EtherFiNode.sol`
+- `src/EtherFiNodesManager.sol`
+- `src/EtherFiOracle.sol`
+- `src/LiquidityPool.sol`
+- `src/Liquifier.sol`
+- `src/LoyaltyPointsMarketSafe.sol`
+- `src/MembershipManager.sol`
+- `src/MembershipNFT.sol`
+- `src/NFTExchange.sol`
+- `src/NodeOperatorManager.sol`
+- `src/StakingManager.sol`
+- `src/TNFT.sol`
+- `src/Treasury.sol`
+- `src/WeETH.sol`
+- `src/WithdrawRequestNFT.sol`
+- `src/archive/MembershipManagerV0.sol`
+- `src/archive/ProtocolRevenueManager.sol`
+- `src/archive/RegulationsManager.sol`
+- `src/archive/RegulationsManagerV2.sol`
+- `src/helpers/AddressProvider.sol`
+- `src/helpers/EtherFiViewer.sol`
 
-Some examples of protocol setup with the venn firewall:
+In addition, due to EVM limitations on contract bytecode size, some of the original contracts have been modified to output optimized bytecode size.
 
-operator registration: https://holesky.etherscan.io/tx/0x19a4ec319c991b2108671c76dcfc2506a9cd5f687dacc19434a6f9ea5ec13d72
+## Showcase
 
-bid:  https://holesky.etherscan.io/tx/0xfa861171b46b06b41b202414a0c48457b2e12e0055b09a16e9df13bbbd1e6448
+To showcase the integration, the following transactions have been used:
 
-deposit and mint: https://holesky.etherscan.io/tx/0x62f726e2f3792532d15caf62d1b95edbd42ac6b76ee54a8f39b77c4d4f64acce
+1. Operator Registration: [Etherscan](https://holesky.etherscan.io/tx/0x19a4ec319c991b2108671c76dcfc2506a9cd5f687dacc19434a6f9ea5ec13d72) | [Phalcon Trace](https://app.blocksec.com/explorer/tx/holesky/0x19a4ec319c991b2108671c76dcfc2506a9cd5f687dacc19434a6f9ea5ec13d72)
 
-Find out more info about the venn firewall at https://docs.venn.build/
+2. Bid: [Etherscan](https://holesky.etherscan.io/tx/0xfa861171b46b06b41b202414a0c48457b2e12e0055b09a16e9df13bbbd1e6448) | [Phalcon Trace](https://app.blocksec.com/explorer/tx/holesky/0xfa861171b46b06b41b202414a0c48457b2e12e0055b09a16e9df13bbbd1e6448)
+
+3. Deposit & Mint: [Etherscan](https://holesky.etherscan.io/tx/0x62f726e2f3792532d15caf62d1b95edbd42ac6b76ee54a8f39b77c4d4f64acce) | [Phalcon Trace](https://app.blocksec.com/explorer/tx/holesky/0x62f726e2f3792532d15caf62d1b95edbd42ac6b76ee54a8f39b77c4d4f64acce)
+
+## Try it out!
+
+This version of EtherFi contracts will only accept transactions that have been verified by Venn.  
+You can try it out with the [Venn DApp SDK](https://www.npmjs.com/package/@vennbuild/venn-dapp-sdk)
+
+## What is Venn?
+
+Venn is a decentralized cybersecurity infrastructure that protects blockchain applications and protocols from malicious transactions and economic risks.
+
+Learn more at https://docs.venn.build/
 
 ---
 
-
-
+<br /><br /><br />
+original readme below
+<br /><br /><br />
 
 # etherfi-protocol smart-contracts
 
