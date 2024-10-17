@@ -1,3 +1,26 @@
+# etherfi-protocol x venn integration
+
+This repo contains the etherfi-protocol smart contracts modified with the addition of the venn firewall.
+
+Contracts that have been modified will have functions with a `firewallProtected` modifier.
+
+To make the integration work, some changes have been made to the original contracts, mostly simple bytecode optimisations.
+
+Some examples of protocol setup with the venn firewall:
+
+operator registration: https://holesky.etherscan.io/tx/0x19a4ec319c991b2108671c76dcfc2506a9cd5f687dacc19434a6f9ea5ec13d72
+
+bid:  https://holesky.etherscan.io/tx/0xfa861171b46b06b41b202414a0c48457b2e12e0055b09a16e9df13bbbd1e6448
+
+deposit and mint: https://holesky.etherscan.io/tx/0x62f726e2f3792532d15caf62d1b95edbd42ac6b76ee54a8f39b77c4d4f64acce
+
+Find out more info about the venn firewall at https://docs.venn.build/
+
+---
+
+
+
+
 # etherfi-protocol smart-contracts
 
 Smart Contracts for ether.fi ethereum staking protocol.
