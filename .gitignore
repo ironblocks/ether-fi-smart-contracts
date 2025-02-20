@@ -19,7 +19,7 @@ typechain-types
 .vscode/
 release/*
 release/logs/*
-release/abis
+release/abis/*
 
 # Hardhat files
 cache
