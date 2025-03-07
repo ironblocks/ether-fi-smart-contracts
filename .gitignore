@@ -11,7 +11,7 @@ out/
 .env
 node_modules
 node_modules
-.env.*
+.env
 coverage
 coverage.json
 typechain
@@ -20,6 +20,7 @@ typechain-types
 release/*
 release/logs/*
 release/abis/*
+release/abis/*.json
 
 # Hardhat files
 cache
